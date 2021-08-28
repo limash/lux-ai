@@ -301,3 +301,14 @@ class GlobalVarActor:
 
     def get_done(self):
         return self.done
+
+
+class DataValue:
+    def __init__(self, n_points):
+        self.is_done = False
+        self.ready = False
+        self.ready_count = n_points
+        self.data = []
+
+    def append(self, data):
+        self.data.append(data)

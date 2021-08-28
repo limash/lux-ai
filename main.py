@@ -23,7 +23,8 @@ def one_call(input_data, checkpoint):
                                    min_size=config["batch_size"], max_size=config["buffer_size"],
                                    checkpointer=checkpointer)
     # init collector:
-    agent = collector.Agent(config, buffer.table_names, buffer.server_port)
+    collector_agent = collector.Agent(config, buffer.table_names, buffer.server_port)
+    collector_agent.collect_once()
     # init trainer
     # init single_agent, which collects and trains
 
