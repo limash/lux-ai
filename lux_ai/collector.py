@@ -50,10 +50,10 @@ class Agent(abc.ABC):
         self._n_points = config["n_points"]
 
         self._table_names = buffer_table_names
-        self._replay_memory_client = reverb.Client(f'localhost:{buffer_server_port}')
+        self._client = reverb.Client(f'localhost:{buffer_server_port}')
 
         self._ray_queue = ray_queue
-        self._worker_id = collector_id
+        self._collector_id = collector_id
         self._workers_info = workers_info
         self._num_collectors = num_collectors
 
@@ -126,7 +126,7 @@ class Agent(abc.ABC):
         player1_data = {}
         player2_data = {}
 
-        def add_point(player_data, actions_dict, actions_probs, proc_obs):
+        def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
             for i, (acts, acts_prob, obs) in enumerate(zip(actions_dict.values(),
                                                            actions_probs.values(),
                                                            proc_obs.values())):
@@ -135,10 +135,10 @@ class Agent(abc.ABC):
                                                                             obs.items()):
                     value = [action, action_probs, actions_masks[i], observation]
                     if k in player_data.keys():
-                        player_data[k].append(value)
+                        player_data[k].append(value, current_step)
                     else:
-                        player_data[k] = []
-                        player_data[k].append(value)
+                        player_data[k] = tools.DataValue()
+                        player_data[k].append(value, current_step)
             return player_data
 
         observations = self._environment.reset()
@@ -149,8 +149,9 @@ class Agent(abc.ABC):
         actions_2, actions_2_dict, actions_2_probs, proc_obs2, reward2 = agent(observations[1],
                                                                                configuration, game_states[1])
 
-        player1_data = add_point(player1_data, actions_1_dict, actions_1_probs, proc_obs1)
-        player2_data = add_point(player2_data, actions_2_dict, actions_2_probs, proc_obs2)
+        step = 0
+        player1_data = add_point(player1_data, actions_1_dict, actions_1_probs, proc_obs1, step)
+        player2_data = add_point(player2_data, actions_2_dict, actions_2_probs, proc_obs2, step)
 
         for step in range(1, configuration.episodeSteps):
             dones, observations = self._environment.step((actions_1, actions_2))
@@ -160,104 +161,81 @@ class Agent(abc.ABC):
             actions_2, actions_2_dict, actions_2_probs, proc_obs2, reward2 = agent(observations[1],
                                                                                    configuration, game_states[1])
 
-            player1_data = add_point(player1_data, actions_1_dict, actions_1_probs, proc_obs1)
-            player2_data = add_point(player2_data, actions_2_dict, actions_2_probs, proc_obs2)
+            player1_data = add_point(player1_data, actions_1_dict, actions_1_probs, proc_obs1, step)
+            player2_data = add_point(player2_data, actions_2_dict, actions_2_probs, proc_obs2, step)
             if any(dones):
                 break
 
-        # ray_writers = [self._replay_memory_client.trajectory_writer(num_keep_alive_refs=self._n_points)
-        #                for _ in range(self._n_players)]
+        progress = tf.linspace(0., 1., step + 2)[:-1]
+        progress = tf.cast(progress, dtype=tf.float16)
 
-        # dones = [False for _ in range(self._n_players)]  # for a first check
-        # ready = [False for _ in range(self._n_players)]
-        # ready_counter = [0 for _ in range(self._n_players)]
+        if reward1 > reward2:
+            final_reward_1 = tf.constant(1, dtype=tf.float16)
+            final_reward_2 = tf.constant(-1, dtype=tf.float16)
+        elif reward1 < reward2:
+            final_reward_2 = tf.constant(1, dtype=tf.float16)
+            final_reward_1 = tf.constant(-1, dtype=tf.float16)
+        else:
+            final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
 
-        # obs_records = []
+        obs_zeros = tf.zeros(self._feature_maps_shape, dtype=tf.float16)
+        act_zeros = tf.zeros(39, dtype=tf.float16)
 
-        # some constants we are going to use repeatedly
-        # action_negative, reward_zero = tf.constant(-1), tf.constant(0.)
-        # done_true, done_false = tf.constant(1.), tf.constant(0.)
-        # action_probs_zero = tf.zeros(39)
-        # rewards_saver = [None, None]
-        # obs_zeros = (tf.zeros(self._feature_maps_shape, dtype=tf.float16))
+        def send_data(player_data, total_reward):
+            for data_object in player_data.values():
+                entity_temporal_data_list, current_step = data_object.data, data_object.step
+                entity_temporal_data_list = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.float16),
+                                                                  entity_temporal_data_list)
+                with self._client.trajectory_writer(num_keep_alive_refs=self._n_points) as writer:
+                    for i, data_entry in enumerate(entity_temporal_data_list):
+                        act, act_probs, act_mask, obs = data_entry
+                        writer.append({'action': act,
+                                       'action_probs': act_probs,
+                                       'action_mask': act_mask,
+                                       'observation': obs,
+                                       'total_reward': total_reward,
+                                       'temporal_mask': tf.constant(1, dtype=tf.float16),
+                                       'progress': progress[current_step[i]]
+                                       })
+                        if i >= self._n_points - 1:
+                            writer.create_item(
+                                table=self._table_names[0],
+                                priority=1.5,
+                                trajectory={
+                                    'actions': writer.history['action'][-self._n_points:],
+                                    'actions_probs': writer.history['action_probs'][-self._n_points:],
+                                    'actions_masks': writer.history['action_mask'][-self._n_points:],
+                                    'observations': writer.history['observation'][-self._n_points:],
+                                    'total_rewards': writer.history['total_reward'][-self._n_points:],
+                                    'temporal_masks': writer.history['temporal_mask'][-self._n_points:],
+                                    'progresses': writer.history['progress'][-self._n_points:],
+                                }
+                            )
+                    for j in range(i, i + self._n_points - 1):
+                        writer.append({'action': act_zeros,
+                                       'action_probs': act_zeros,
+                                       'action_mask': act_zeros,
+                                       'observation': obs_zeros,
+                                       'total_reward': tf.constant(0, dtype=tf.float16),
+                                       'temporal_mask': tf.constant(0, dtype=tf.float16),
+                                       'progress': tf.constant(1, dtype=tf.float16)
+                                       })
+                        writer.create_item(
+                            table=self._table_names[0],
+                            priority=1.5,
+                            trajectory={
+                                'actions': writer.history['action'][-self._n_points:],
+                                'actions_probs': writer.history['action_probs'][-self._n_points:],
+                                'actions_masks': writer.history['action_mask'][-self._n_points:],
+                                'observations': writer.history['observation'][-self._n_points:],
+                                'total_rewards': writer.history['total_reward'][-self._n_points:],
+                                'temporal_masks': writer.history['temporal_mask'][-self._n_points:],
+                                'progresses': writer.history['progress'][-self._n_points:],
+                            }
+                        )
 
-        # obsns = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.uint8), obsns)
-        # for i, writer in enumerate(writers):
-        #     obs = obsns[i][0], obsns[i][1]
-        #     obs_records.append(obs)
-        #     if epsilon is None:
-        #         writer.append((action_negative, action_probs_zero, obs, reward_zero, done_false))
-        #     else:
-        #         writer.append((action_negative, obs, reward_zero, done_false))
-        # step_counter = 1  # start with 1, since we have at least initialization
-        # steps_per_worker_counter = [1 for _ in range(self._n_players)]
-
-        # while not all(ready):
-        #     if not all(dones):
-        #         if epsilon is None:
-        #             actions, policy_logits = self._policy(obs_records, is_random)
-        #             policy_logits = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.float32),
-        #                                                   policy_logits)
-        #         else:
-        #             actions = self._policy(obs_records, epsilon, info)
-
-        #         step_counter += 1
-        #         obsns, rewards, dones, info = self._train_env.step(actions)
-        #         # environment step receives actions and outputs observations for the dead players also
-        #         # but it takes no effect
-        #         actions = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.int32), actions)
-        #         rewards = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.float32), rewards)
-        #         dones = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.float32), dones)
-        #         obsns = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.uint8), obsns)
-
-        #     obs_records = []
-        #     for i, writer in enumerate(writers):
-        #         if ready_counter[i] == self._n_points - 1:
-        #             ready[i] = True
-        #             obs_records.append(obs_zeros)
-        #             continue
-        #         action, reward, done = actions[i], rewards[i], dones[i]
-        #         if done:
-        #             ready_counter[i] += 1
-        #             # the first 'done' encounter, save a final reward
-        #             if rewards_saver[i] is None:
-        #                 rewards_saver[i] = reward
-        #                 # steps_per_worker_counter[i] += 1
-        #             # consequent 'done' encounters, put zero actions and logits
-        #             else:
-        #                 action = action_negative
-        #                 if epsilon is None:
-        #                     policy_logits[i] = action_probs_zero
-        #             obs = obs_zeros
-        #             # if 'done', store final rewards
-        #             reward = rewards_saver[i]
-        #         else:
-        #             obs = obsns[i][0], obsns[i][1]
-        #             # steps_per_worker_counter[i] += 1
-        #         obs_records.append(obs)
-        #         if epsilon is None:
-        #             writer.append((action, policy_logits[i], obs, reward, done))
-        #         else:
-        #             writer.append((action, obs, reward, done))  # returns Runtime Error if a writer is closed
-
-        # progress = tf.concat([tf.constant([0.]),
-        #                       tf.linspace(0., 1., step_counter)[:-1],
-        #                       tf.ones(self._n_points - 2)], axis=0)
-        # for i, ray_writer in enumerate(ray_writers):
-        #     steps = len(writers[i])
-        #     # progress = tf.concat([tf.constant([0.]),
-        #     #                       tf.linspace(0., 1., steps_per_worker_counter[i])[:-1],
-        #     #                       tf.ones(steps - steps_per_worker_counter[i])], axis=0)
-
-        #     for step in range(steps):
-        #         action, logits, obs, reward, done = (writers[i][step][0], writers[i][step][1],
-        #                                              writers[i][step][2], writers[i][step][3],
-        #                                              writers[i][step][4])
-        #         ray_writer.append((action, logits, obs, reward, done, rewards_saver[i], progress[step]))
-        #         if step >= self._n_points - 1:
-        #             ray_writer.create_item(table=self._table_names[0], num_timesteps=self._n_points, priority=1.)
-
-        #     ray_writer.close()
+        send_data(player1_data, final_reward_1)
+        send_data(player2_data, final_reward_2)
 
     def collect_once(self):
         policy = random.sample(self._policies_pool, 1)[0]
@@ -276,7 +254,7 @@ class Agent(abc.ABC):
             # get the current turn, so collectors (workers) update weights one by one
             curr_worker = ray.get(self._workers_info.get_global_v.remote())
             # check the current turn
-            if curr_worker == self._worker_id:
+            if curr_worker == self._collector_id:
                 if not self._ray_queue.empty():  # see below
                     try:
                         # block = False will cause an exception if there is no data in the queue,

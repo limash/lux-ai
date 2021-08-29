@@ -37,7 +37,7 @@ def one_call(input_data, checkpoint):
     #     pickle.dump(data, f, protocol=4)
     # with open('data/checkpoint', 'w') as text_file:
     #     print(checkpoint, file=text_file)
-    # print("Done")
+    print("Done")
 
 
 if __name__ == '__main__':

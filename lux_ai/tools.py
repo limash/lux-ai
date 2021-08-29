@@ -304,11 +304,10 @@ class GlobalVarActor:
 
 
 class DataValue:
-    def __init__(self, n_points):
-        self.is_done = False
-        self.ready = False
-        self.ready_count = n_points
+    def __init__(self):
         self.data = []
+        self.step = []
 
-    def append(self, data):
+    def append(self, data, step):
         self.data.append(data)
+        self.step.append(step)
