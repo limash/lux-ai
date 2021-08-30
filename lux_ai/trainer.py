@@ -1,198 +1,78 @@
+import abc
 import pickle
 
 import tensorflow as tf
+import reverb
 
-from tf_reinforcement_agents.abstract_agent import Agent
-from tf_reinforcement_agents import models
-
-from tf_reinforcement_agents import storage, misc
+from lux_ai import models, tools
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
-class ACAgent(Agent):
+class Agent(abc.ABC):
 
-    def __init__(self, env_name, config,
-                 buffer_table_names, buffer_server_port,
-                 *args, **kwargs):
-        super().__init__(env_name, config,
-                         buffer_table_names, buffer_server_port,
-                         *args, **kwargs)
+    def __init__(self, config, data,
+                 buffer_table_names, buffer_server_port
+                 ):
 
-        self._entropy_c = config["entropy_c"]
-        self._entropy_c_decay = config["entropy_c_decay"]
-        self._lambda = config["lambda"]
+        # self._entropy_c = config["entropy_c"]
+        # self._entropy_c_decay = config["entropy_c_decay"]
+        # self._lambda = config["lambda"]
 
-        if config["buffer"] == "n_points":
-            self._datasets = [storage.initialize_dataset_with_logits(buffer_server_port,
-                                                                     buffer_table_names[i],
-                                                                     self._input_shape,
-                                                                     self._sample_batch_size,
-                                                                     i + 2) for i in range(self._n_points - 1)]
-            self._iterators = [iter(self._datasets[i]) for i in range(self._n_points - 1)]
-        elif config["buffer"] == "full_episode":
-            dataset = storage.initialize_dataset_with_logits(buffer_server_port,
-                                                             buffer_table_names[0],
-                                                             self._input_shape,
-                                                             self._sample_batch_size,
-                                                             self._n_points,
-                                                             is_episode=False)  # True if use insert in a buffer
-            self._iterators = [iter(dataset), ]
-        else:
-            print("Check a buffer argument in config")
-            raise LookupError
+        feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
+        actions_shape = 39
 
-        # self._model = models.get_actor_critic(self._input_shape, self._n_outputs)
-        self._model = models.get_actor_critic2(model_type='exp')
-        # launch a model once to define structure
-        dummy_input = (tf.ones(self._input_shape[0], dtype=tf.uint8),
-                       tf.ones(self._input_shape[1], dtype=tf.uint8))
-        dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
-        self._predict(dummy_input)
+        self._model = models.get_actor_critic(feature_maps_shape, actions_shape)
 
-        # with open('data/data_brick.pickle', 'rb') as file:
-        #     data = pickle.load(file)
-        # self._model.layers[0].set_weights(data['weights'][:66])
-        # self._model.layers[1].set_weights(data['weights'][:66])
-        # self._model.layers[0].trainable = False
-        # continue a model training
-        if self._data is not None:
-            self._model.set_weights(self._data['weights'])
+        if data is not None:
+            self._model.set_weights(data['weights'])
             print("Continue the model training.")
-        # self._model.layers[0].trainable = True
 
         self._is_debug = config["debug"]
         if not config["debug"]:
-            self._training_step = tf.function(self._training_step)
             self._training_step_full = tf.function(self._training_step_full)
 
-        if config["setup"] != "complex":  # in a complex setup workers will gather experience
-            self._collect_several_episodes(config["init_episodes"], is_random=True)
+        self._dataset = reverb.TrajectoryDataset.from_table_signature(
+            server_address=f'localhost:{buffer_server_port}',
+            table=buffer_table_names[0],
+            max_in_flight_samples_per_worker=2*config["batch_size"])
+        self._client = reverb.Client(f'localhost:{buffer_server_port}')
+        self._batch_size = config["batch_size"]
 
-        # reward, steps = self._evaluate_episodes(num_episodes=10)
-        # print(f"Initial reward with a model policy is {reward:.2f}, steps: {steps:.2f}")
+    def imitate_once(self):
+        batched_dataset = self._dataset.batch(self._batch_size)
+        for sample in batched_dataset.take(1):
+            actions = sample.data['actions']
+            action_v = actions.numpy()
+            actions_probs = sample.data['actions_probs']
+            action_probs_v = actions_probs.numpy()
+            actions_masks = sample.data['actions_masks']
+            actions_masks_v = actions_masks.numpy()
+            observations = sample.data['observations']
+            observations_v = observations.numpy()
+            total_rewards = sample.data['total_rewards']
+            total_rewards_v = total_rewards.numpy()
+            temporal_masks = sample.data['temporal_masks']
+            temporal_masks_v = temporal_masks.numpy()
+            progresses = sample.data['progresses']
+            progresses_v = progresses.numpy()
+        info = self._client.server_info()
 
-    def _policy(self, obsns, is_random=False):
-        actions = []
-        logits = []
-        obsns = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), obsns)
-        for i in range(self._n_players):
-            obs = obsns[i]
-            if is_random:
-                policy_logits = tf.zeros([tf.shape(obs[0])[0], self._n_outputs])
-            else:
-                policy_logits, _ = self._predict(obs)
-            action = tf.random.categorical(policy_logits, num_samples=1, dtype=tf.int32)
-            actions.append(action.numpy()[0][0])
-            logits.append(policy_logits.numpy()[0])
-            # probabilities = tf.nn.softmax(policy_logits)
-            # return np.argmax(probabilities[0])
+        ds = self._dataset.map(lambda x: ((x.data['observations'], x.data['actions_masks']),
+                                          (x.data['actions'], x.data['total_rewards'])))
+        batched_dataset = ds.batch(self._batch_size)
 
-        return actions, logits
+        self._model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+            loss=tf.keras.losses.KLDivergence()
+        )
 
-    def _sample_experience(self, fraction=None):
-        samples = []
-        if self._is_full_episode:
-            iterator = self._iterators[0]
-            samples.append(next(iterator))
-            self._items_sampled[0] += self._sample_batch_size
-        elif self._is_all_trajectories:
-            for i, iterator in enumerate(self._iterators):
-                trigger = tf.random.uniform(shape=[])
-                # sample 2 steps all the time, further steps with decreasing probability no less than 0.25
-                if i > 0 and trigger > max(1. / (i + 1.), 0.25):
-                    samples.append(None)
-                else:
-                    samples.append(next(iterator))
-                    self._items_sampled[i] += self._sample_batch_size
-        else:
-            # sampling for _collect_some_trajectories_
-            for i, iterator in enumerate(self._iterators):
-                quota = fraction[i] / fraction[-1]
-                # train 5 times more often in all tables except the last one
-                if quota < 5:
-                    # if i == 1:
-                    #     print(self._sampling_meter)
-                    #     self._sampling_meter = 0
-                    samples.append(next(iterator))
-                    self._items_sampled[i] += self._sample_batch_size
-                else:
-                    # if i == 1:
-                    #     self._sampling_meter += 1
-                    samples.append(None)
+        self._model.fit(batched_dataset, epochs=1)
+        self._model.evaluate(batched_dataset)
 
-        return samples
-
-    def _prepare_td_arguments(self, actions, observations, rewards, dones, steps):
-        exponents = tf.expand_dims(tf.range(steps - 1, dtype=tf.float32), axis=1)
-        gammas = tf.fill([steps - 1, 1], self._discount_rate.numpy())
-        discounted_gammas = tf.pow(gammas, exponents)
-
-        total_rewards = tf.squeeze(tf.matmul(rewards[:, 1:], discounted_gammas))
-        first_observations = tf.nest.map_structure(lambda x: x[:, 0, ...], observations)
-        last_observations = tf.nest.map_structure(lambda x: x[:, -1, ...], observations)
-        last_dones = dones[:, -1]
-        last_discounted_gamma = self._discount_rate ** (steps - 1)
-        second_actions = actions[:, 1]
-        return total_rewards, first_observations, last_observations, last_dones, last_discounted_gamma, second_actions
-
-    def _get_learning_rate(self, data_cnt, batch_cnt, steps):
-        self._data_cnt_ema = self._data_cnt_ema * 0.8 + data_cnt / (1e-2 + batch_cnt) * 0.2
-        # print(f"Data count EMA: {self._data_cnt_ema}")
-        lr = self._default_lr * self._data_cnt_ema / (1 + steps * 1e-5)
-        return lr
-
-    def _training_step(self, actions, behaviour_policy_logits, observations, rewards, dones,
-                       total_rewards, episode_dones, steps, info):
-        print("Tracing")
-        total_rewards, first_observations, last_observations, last_dones, last_discounted_gamma, second_actions = \
-            self._prepare_td_arguments(actions, observations, rewards, dones, steps)
-
-        next_logits, baseline = self._model(last_observations)
-        target_V = total_rewards + (tf.constant(1.0) - last_dones) * last_discounted_gamma * tf.squeeze(baseline)
-        target_V = tf.expand_dims(target_V, -1)
-        with tf.GradientTape() as tape:
-            logits, V_values = self._model(first_observations)
-
-            # critic loss
-            critic_loss = self._loss_fn(target_V, V_values)
-            # critic_loss_sum = .5 * tf.reduce_sum(tf.square(target_V - V_values))
-
-            # actor loss
-            # probs = tf.nn.softmax(logits)
-            # mask = tf.one_hot(second_actions, self._n_outputs, dtype=tf.float32)
-            # masked_probs = tf.reduce_sum(probs * mask, axis=1, keepdims=True)
-            # logs = tf.math.log(masked_probs)
-            # below is similar to above 4 lines, returns log probs from logits masked by actions
-            logs = -tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
-                                                                   labels=second_actions)
-            # td error with truncated IS weights (rhos), it is a constant:
-            with tape.stop_recording():
-                # second logits correspond to second actions
-                behaviour_logs = -tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    logits=behaviour_policy_logits[:, 1, :],
-                    labels=second_actions
-                )
-                log_rhos = logs - behaviour_logs
-                rhos = tf.exp(log_rhos)
-                clipped_rhos = tf.minimum(tf.constant(1.), rhos)
-                clipped_rhos = tf.expand_dims(clipped_rhos, -1)
-                td_error = clipped_rhos * (target_V - V_values)
-
-            logs = tf.expand_dims(logs, -1)
-            actor_loss = -1 * logs * td_error
-            actor_loss = tf.reduce_mean(actor_loss)
-            # actor_loss = tf.reduce_sum(actor_loss)
-
-            # entropy loss
-            entropy = misc.get_entropy(logits)
-            entropy_loss = -1 * self._entropy_c * tf.reduce_mean(entropy)
-
-            loss = actor_loss + critic_loss + entropy_loss
-        grads = tape.gradient(loss, self._model.trainable_variables)
-        self._optimizer.apply_gradients(zip(grads, self._model.trainable_variables))
+        print("imitation done")
 
     def _training_step_full(self, actions, behaviour_policy_logits, observations, rewards, dones,
                             total_rewards, progress, steps, info):
@@ -505,121 +385,3 @@ class ACAgent(Agent):
                 break
 
         return weights, mask, checkpoint
-
-    def do_train_collect(self, iterations_number=20000, eval_interval=2000):
-
-        target_model_update_interval = 3000
-        epsilon_fn = tf.keras.optimizers.schedules.PolynomialDecay(
-            initial_learning_rate=self._start_epsilon,
-            decay_steps=iterations_number,
-            end_learning_rate=self._final_epsilon) if self._start_epsilon is not None else None
-
-        weights = None
-        mask = None
-        rewards = 0
-        steps = 0
-        eval_counter = 0
-        print_interval = 10
-        data_counter = 0
-        is_random = True
-
-        items_created = []
-        for table_name in self._table_names:
-            server_info = self._replay_memory_client.server_info()[table_name]
-            items_total = server_info.current_size + server_info.num_deleted_episodes
-            items_created.append(items_total)
-
-        lr = self._default_lr * self._data_cnt_ema
-        self._optimizer.learning_rate.assign(lr)
-
-        for step_counter in range(1, iterations_number + 1):
-            # collecting
-            # items_created = [self._replay_memory_client.server_info()[table_name].current_size
-            #                  for table_name in self._table_names]
-            # do not collect new experience if we have not used previous
-            fraction = [x / y if (x != 0 and y != 0) else None for x, y in zip(self._items_sampled, items_created)]
-
-            # sampling
-            samples = self._sample_experience(fraction)
-
-            # training
-            # t1 = time.time()
-            data_count = self._train(samples)
-            data_counter += data_count.numpy()
-            # t2 = time.time()
-            # print(f"Training. Step: {step_counter} Time: {t2 - t1}")
-
-            # sample items (and train) 10 times more than collecting items to the last table
-            # if fraction[-1] > 10:
-            epsilon = epsilon_fn(step_counter) if epsilon_fn is not None else None
-            # t1 = time.time()
-            if step_counter > 10:
-                is_random = False
-            self._collect(epsilon, is_random)
-            # t2 = time.time()
-            # print(f"Collecting. Step: {step_counter} Time: {t2-t1}")
-
-            if step_counter % print_interval == 0:
-                lr = self._get_learning_rate(data_counter, print_interval, step_counter)
-                self._optimizer.learning_rate.assign(lr)
-                data_counter = 0
-
-                items_prev = items_created
-                items_created = []
-                for table_name in self._table_names:
-                    server_info = self._replay_memory_client.server_info()[table_name]
-                    items_total = server_info.current_size + server_info.num_deleted_episodes
-                    items_created.append(items_total)
-
-                per_step_items_created = items_created[-1] - items_prev[-1]
-                if per_step_items_created == 0:
-                    step_fraction = self._sample_batch_size * print_interval
-                else:
-                    step_fraction = self._sample_batch_size * print_interval / per_step_items_created
-
-                print(f"Step: {step_counter}, Sampled current epoch: {self._items_sampled[0]}, "
-                      f"Created total: {items_created[0]}, "
-                      f"Sample / creation frac: {step_fraction:.2f}, "
-                      f"Learning rate: {lr:.2e}, "
-                      f"Data cnt ema: {self._data_cnt_ema:.2f}")
-
-            # evaluation
-            if step_counter % eval_interval == 0:
-                eval_counter += 1
-                epsilon = 0 if epsilon_fn is not None else None
-                mean_episode_reward, mean_steps = self._evaluate_episodes(epsilon=epsilon)
-                print(f"Iteration:{step_counter:.2f}; "
-                      f"Reward: {mean_episode_reward:.2f}; "
-                      f"Steps: {mean_steps:.2f}")
-                rewards += mean_episode_reward
-                steps += mean_steps
-
-            # update target model weights
-            if self._target_model and step_counter % target_model_update_interval == 0:
-                weights = self._model.get_weights()
-                self._target_model.set_weights(weights)
-
-            # store weights at the last step
-            if step_counter % iterations_number == 0:
-                epsilon = 0 if epsilon_fn is not None else None
-                mean_episode_reward, mean_steps = self._evaluate_episodes(num_episodes=10, epsilon=epsilon)
-                print(f"Final reward with a model policy is {mean_episode_reward:.2f}; "
-                      f"Final average steps survived is {mean_steps:.2f}")
-                output_reward = rewards / eval_counter
-                output_steps = steps / eval_counter
-                print(f"Average episode reward with a model policy is {output_reward:.2f}; "
-                      f"Final average per episode steps survived is {output_steps:.2f}")
-
-                weights = self._model.get_weights()
-                mask = list(map(lambda x: np.where(np.abs(x) < 0.1, 0., 1.), weights))
-
-                if self._make_checkpoint:
-                    try:
-                        checkpoint = self._replay_memory_client.checkpoint()
-                    except RuntimeError as err:
-                        print(err)
-                        checkpoint = err
-                else:
-                    checkpoint = None
-
-        return weights, mask, output_reward, output_steps, checkpoint

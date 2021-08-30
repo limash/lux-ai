@@ -3,7 +3,7 @@ from pathlib import Path
 
 import reverb
 
-from lux_ai import storage, collector
+from lux_ai import storage, collector, trainer, tools
 from run_configuration import *
 
 main_config = CONF_ActorCritic
@@ -19,13 +19,16 @@ def one_call(input_data, checkpoint):
     else:
         checkpointer = None
 
-    buffer = storage.UniformBuffer(num_tables=1,
-                                   min_size=config["batch_size"], max_size=config["buffer_size"],
-                                   checkpointer=checkpointer)
+    feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
+    buffer = storage.UniformBuffer(feature_maps_shape,
+                                   num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
+                                   n_points=config["n_points"], checkpointer=checkpointer)
     # init collector:
     collector_agent = collector.Agent(config, buffer.table_names, buffer.server_port)
     collector_agent.collect_once()
     # init trainer
+    trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
+    trainer_agent.imitate_once()
     # init single_agent, which collects and trains
 
     # data = {

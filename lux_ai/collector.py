@@ -1,8 +1,5 @@
 import abc
 import random
-# import pickle
-# import itertools as it
-# import time
 
 import numpy as np
 import tensorflow as tf
@@ -10,9 +7,13 @@ import gym
 import reverb
 import ray
 
-from lux_ai import models
-from lux_ai import tools
+from lux_ai import models, tools
 import lux_gym.agents.agents as agents
+
+
+physical_devices = tf.config.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
 def get_policy(model):
@@ -35,7 +36,7 @@ class Agent(abc.ABC):
             config: A configuration dictionary
             buffer_table_names: dm reverb server table names
             buffer_server_port: a port where a dm reverb server was initialized
-            data: a neural net weights
+            # data: a neural net weights
             ray_queue: a ray interprocess queue to store neural net weights
             collector_id: to identify a current collector if there are several ones
             workers_info: a ray interprocess (remote) object to store shared information
@@ -44,8 +45,7 @@ class Agent(abc.ABC):
         self._n_players = 2
         self._environment = gym.make(config["environment"])
 
-        _, observations = self._environment.reset_process()
-        self._feature_maps_shape = observations[0]["workers"]["u_1"].shape
+        self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
 
         self._n_points = config["n_points"]
 
@@ -74,7 +74,7 @@ class Agent(abc.ABC):
     #     self._model.set_weights(data['weights'])
 
     def add_model_to_pool(self, data):
-        model = models.get_actor_critic2(model_type='exp')
+        model = models.get_actor_critic()
         dummy_input = tf.ones(self._feature_maps_shape, dtype=tf.float16)
         dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
         model = tf.function(model)
@@ -110,7 +110,8 @@ class Agent(abc.ABC):
         Collects trajectories from an episode to the buffer.
 
         A buffer contains items, each item consists of several n_points;
-        One n_point contains (action, action_probs, action_mask, obs, reward, temporal_mask);
+        One n_point contains (action, action_probs, action_mask, observation,
+                              total reward, temporal_mask, progress);
         action is a response for the current observation,
         reward, done are for the current observation.
         """
@@ -211,6 +212,7 @@ class Agent(abc.ABC):
                                     'progresses': writer.history['progress'][-self._n_points:],
                                 }
                             )
+                    i += 1
                     for j in range(i, i + self._n_points - 1):
                         writer.append({'action': act_zeros,
                                        'action_probs': act_zeros,
@@ -220,19 +222,21 @@ class Agent(abc.ABC):
                                        'temporal_mask': tf.constant(0, dtype=tf.float16),
                                        'progress': tf.constant(1, dtype=tf.float16)
                                        })
-                        writer.create_item(
-                            table=self._table_names[0],
-                            priority=1.5,
-                            trajectory={
-                                'actions': writer.history['action'][-self._n_points:],
-                                'actions_probs': writer.history['action_probs'][-self._n_points:],
-                                'actions_masks': writer.history['action_mask'][-self._n_points:],
-                                'observations': writer.history['observation'][-self._n_points:],
-                                'total_rewards': writer.history['total_reward'][-self._n_points:],
-                                'temporal_masks': writer.history['temporal_mask'][-self._n_points:],
-                                'progresses': writer.history['progress'][-self._n_points:],
-                            }
-                        )
+                        if j >= self._n_points - 1:
+                            writer.create_item(
+                                table=self._table_names[0],
+                                priority=1.5,
+                                trajectory={
+                                    'actions': writer.history['action'][-self._n_points:],
+                                    'actions_probs': writer.history['action_probs'][-self._n_points:],
+                                    'actions_masks': writer.history['action_mask'][-self._n_points:],
+                                    'observations': writer.history['observation'][-self._n_points:],
+                                    'total_rewards': writer.history['total_reward'][-self._n_points:],
+                                    'temporal_masks': writer.history['temporal_mask'][-self._n_points:],
+                                    'progresses': writer.history['progress'][-self._n_points:],
+                                }
+                            )
+                    writer.end_episode()
 
         send_data(player1_data, final_reward_1)
         send_data(player2_data, final_reward_2)

@@ -4,96 +4,18 @@ import reverb
 from typing import List
 
 
-def initialize_dataset(server_port, table_name, observations_shape, batch_size, n_points, is_episode=False):
-    maps_shape = tf.TensorShape(observations_shape[0])
-    scalars_shape = tf.TensorShape(observations_shape[1])
-
-    actions_tf_shape = tf.TensorShape([])
-    rewards_tf_shape = tf.TensorShape([])
-    dones_tf_shape = tf.TensorShape([])
-
-    if is_episode:
-        observations_tf_shape = ([n_points] + maps_shape, [n_points] + scalars_shape)
-        obs_dtypes = tf.nest.map_structure(lambda x: tf.uint8, observations_tf_shape)
-
-        dataset = reverb.ReplayDataset(
-            server_address=f'localhost:{server_port}',
-            table=table_name,
-            max_in_flight_samples_per_worker=2 * batch_size,
-            dtypes=(tf.int32, obs_dtypes, tf.float32, tf.float32),
-            shapes=([n_points] + actions_tf_shape,
-                    observations_tf_shape,
-                    [n_points] + rewards_tf_shape,
-                    [n_points] + dones_tf_shape))
-    else:
-        observations_tf_shape = (maps_shape, scalars_shape)
-        obs_dtypes = tf.nest.map_structure(lambda x: tf.uint8, observations_tf_shape)
-
-        dataset = reverb.ReplayDataset(
-            server_address=f'localhost:{server_port}',
-            table=table_name,
-            max_in_flight_samples_per_worker=2 * batch_size,
-            dtypes=(tf.int32, obs_dtypes, tf.float32, tf.float32),
-            shapes=(actions_tf_shape, observations_tf_shape, rewards_tf_shape, dones_tf_shape))
-        dataset = dataset.batch(n_points)
-
-    dataset = dataset.batch(batch_size)
-
-    return dataset
-
-
-def initialize_dataset_with_logits(server_port, table_name, observations_shape, batch_size, n_points,
-                                   is_episode=False):
-    maps_shape = tf.TensorShape(observations_shape[0])
-    scalars_shape = tf.TensorShape(observations_shape[1])
-
-    actions_tf_shape = tf.TensorShape([])
-    logits_tf_shape = tf.TensorShape([4, ])
-    rewards_tf_shape = tf.TensorShape([])
-    dones_tf_shape = tf.TensorShape([])
-    total_rewards_tf_shape = tf.TensorShape([])
-    progress_tf_shape = tf.TensorShape([])
-    # episode_dones_tf_shape = tf.TensorShape([])
-    # episode_steps_tf_shape = tf.TensorShape([])
-
-    if is_episode:
-        observations_tf_shape = ([n_points] + maps_shape, [n_points] + scalars_shape)
-        obs_dtypes = tf.nest.map_structure(lambda x: tf.uint8, observations_tf_shape)
-
-        dataset = reverb.ReplayDataset(
-            server_address=f'localhost:{server_port}',
-            table=table_name,
-            max_in_flight_samples_per_worker=2 * batch_size,
-            dtypes=(tf.int32, tf.float32, obs_dtypes, tf.float32, tf.float32),
-            shapes=([n_points] + actions_tf_shape,
-                    [n_points] + logits_tf_shape,
-                    observations_tf_shape,
-                    [n_points] + rewards_tf_shape,
-                    [n_points] + dones_tf_shape))
-    else:
-        observations_tf_shape = (maps_shape, scalars_shape)
-        obs_dtypes = tf.nest.map_structure(lambda x: tf.uint8, observations_tf_shape)
-
-        dataset = reverb.ReplayDataset(
-            server_address=f'localhost:{server_port}',
-            table=table_name,
-            max_in_flight_samples_per_worker=2 * batch_size,
-            dtypes=(tf.int32, tf.float32, obs_dtypes, tf.float32, tf.float32, tf.float32, tf.float32),
-            shapes=(actions_tf_shape, logits_tf_shape, observations_tf_shape, rewards_tf_shape, dones_tf_shape,
-                    total_rewards_tf_shape, progress_tf_shape))
-        dataset = dataset.batch(n_points)
-
-    dataset = dataset.batch(batch_size)
-
-    return dataset
-
-
 class UniformBuffer:
     def __init__(self,
+                 observations_shape,
                  num_tables: int = 1,
                  min_size: int = 64,
                  max_size: int = 100000,
+                 n_points: int = 2,
                  checkpointer=None):
+
+        OBSERVATION_SPEC = tf.TensorSpec(observations_shape, tf.float16)
+        ACTION_SPEC = tf.TensorSpec([39], tf.float16)
+
         self._min_size = min_size
         self._table_names = [f"uniform_table_{i}" for i in range(num_tables)]
         self._server = reverb.Server(
@@ -104,6 +26,15 @@ class UniformBuffer:
                     remover=reverb.selectors.Fifo(),
                     max_size=int(max_size),
                     rate_limiter=reverb.rate_limiters.MinSize(min_size),
+                    signature={
+                        'actions': tf.TensorSpec([n_points, *ACTION_SPEC.shape], ACTION_SPEC.dtype),
+                        'actions_probs': tf.TensorSpec([n_points, *ACTION_SPEC.shape], ACTION_SPEC.dtype),
+                        'actions_masks': tf.TensorSpec([n_points, *ACTION_SPEC.shape], ACTION_SPEC.dtype),
+                        'observations': tf.TensorSpec([n_points, *OBSERVATION_SPEC.shape], OBSERVATION_SPEC.dtype),
+                        'total_rewards': tf.TensorSpec([n_points], tf.float16),
+                        'temporal_masks': tf.TensorSpec([n_points], tf.float16),
+                        'progresses': tf.TensorSpec([n_points], tf.float16),
+                    }
                 ) for i in range(num_tables)
             ],
             # Sets the port to None to make the server pick one automatically.
