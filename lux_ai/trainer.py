@@ -59,8 +59,12 @@ class Agent(abc.ABC):
         #     progresses_v = progresses.numpy()
         # info = self._client.server_info()
 
-        imitate_dataset = self._dataset.map(lambda x: ((x.data['observations'], x.data['actions_masks']),
-                                                       (x.data['actions_probs'], x.data['total_rewards'])))
+        imitate_dataset = self._dataset.map(lambda x: ((tf.cast(x.data['observations'], dtype=tf.float32),
+                                                        tf.cast(x.data['actions_masks'], dtype=tf.float32)),
+                                                       (tf.cast(x.data['actions_probs'], dtype=tf.float32),
+                                                        tf.cast(x.data['total_rewards'], dtype=tf.float32))
+                                                       )
+                                            )
         batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
@@ -76,7 +80,7 @@ class Agent(abc.ABC):
             loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-7, clipnorm=0.0001),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5, clipnorm=4.),
             loss={
                 "probs_output": tf.keras.losses.KLDivergence(),
                 "value_output": tf.keras.losses.MeanSquaredError()
