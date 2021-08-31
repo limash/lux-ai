@@ -3,6 +3,15 @@ import ray
 import gym
 
 
+def merge_first_two_dimensions(input1, input2):
+    (tensor1, tensor2), (tensor3, tensor4) = input1, input2
+    tensors = tensor1, tensor2, tensor3, tensor4
+    b = [tf.reshape(a, tf.concat([[tf.shape(a)[0] * tf.shape(a)[1]], tf.shape(a)[2:]], axis=0)) for a in tensors]
+    tensor1, tensor2, tensor3, tensor4 = b
+    outputs = (tensor1, tensor2), (tensor3, tensor4)
+    return outputs
+
+
 def get_feature_maps_shape(env_name):
     environment = gym.make(env_name)
     _, observations = environment.reset_process()

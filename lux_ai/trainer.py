@@ -42,35 +42,56 @@ class Agent(abc.ABC):
         self._batch_size = config["batch_size"]
 
     def imitate_once(self):
-        batched_dataset = self._dataset.batch(self._batch_size)
-        for sample in batched_dataset.take(1):
-            actions = sample.data['actions']
-            action_v = actions.numpy()
-            actions_probs = sample.data['actions_probs']
-            action_probs_v = actions_probs.numpy()
-            actions_masks = sample.data['actions_masks']
-            actions_masks_v = actions_masks.numpy()
-            observations = sample.data['observations']
-            observations_v = observations.numpy()
-            total_rewards = sample.data['total_rewards']
-            total_rewards_v = total_rewards.numpy()
-            temporal_masks = sample.data['temporal_masks']
-            temporal_masks_v = temporal_masks.numpy()
-            progresses = sample.data['progresses']
-            progresses_v = progresses.numpy()
-        info = self._client.server_info()
+        # for sample in self._dataset.take(1):
+        #     actions = sample.data['actions']
+        #     action_v = actions.numpy()
+        #     actions_probs = sample.data['actions_probs']
+        #     action_probs_v = actions_probs.numpy()
+        #     actions_masks = sample.data['actions_masks']
+        #     actions_masks_v = actions_masks.numpy()
+        #     observations = sample.data['observations']
+        #     observations_v = observations.numpy()
+        #     total_rewards = sample.data['total_rewards']
+        #     total_rewards_v = total_rewards.numpy()
+        #     temporal_masks = sample.data['temporal_masks']
+        #     temporal_masks_v = temporal_masks.numpy()
+        #     progresses = sample.data['progresses']
+        #     progresses_v = progresses.numpy()
+        # info = self._client.server_info()
 
-        ds = self._dataset.map(lambda x: ((x.data['observations'], x.data['actions_masks']),
-                                          (x.data['actions'], x.data['total_rewards'])))
-        batched_dataset = ds.batch(self._batch_size)
+        imitate_dataset = self._dataset.map(lambda x: ((x.data['observations'], x.data['actions_masks']),
+                                                       (x.data['actions_probs'], x.data['total_rewards'])))
+        batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
+        dataset = batched_dataset.map(tools.merge_first_two_dimensions)
+
+        for sample in dataset.take(1):
+            observations = sample[0][0].numpy()
+            actions_masks = sample[0][1].numpy()
+            actions_probs = sample[1][0].numpy()
+            total_rewards = sample[1][1].numpy()
+
+            probs_output, value_output = self._model((observations, actions_masks))
+            probs_output_v = probs_output.numpy()
+            value_output_v = value_output.numpy()
+            loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
-            loss=tf.keras.losses.KLDivergence()
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-7, clipnorm=0.0001),
+            loss={
+                "probs_output": tf.keras.losses.KLDivergence(),
+                "value_output": tf.keras.losses.MeanSquaredError()
+            },
+            # metrics={
+            #     "probs_output": [tf.keras.metrics.CategoricalAccuracy()],
+            #     "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
+            #                      tf.keras.metrics.MeanAbsoluteError()]
+            # },
+            # loss_weights={"probs_output": 2.0,
+            #               "value_output": 1.0}
         )
 
-        self._model.fit(batched_dataset, epochs=1)
-        self._model.evaluate(batched_dataset)
+        self._model.fit(dataset, epochs=1)
+        self._model.evaluate(dataset)
 
         print("imitation done")
 

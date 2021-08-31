@@ -181,6 +181,8 @@ class Agent(abc.ABC):
 
         obs_zeros = tf.zeros(self._feature_maps_shape, dtype=tf.float16)
         act_zeros = tf.zeros(39, dtype=tf.float16)
+        act_ones = tf.ones(39, dtype=tf.float16)
+        act_probs_uni = tf.ones(39, dtype=tf.float16) * 1/39
 
         def send_data(player_data, total_reward):
             for data_object in player_data.values():
@@ -215,8 +217,8 @@ class Agent(abc.ABC):
                     i += 1
                     for j in range(i, i + self._n_points - 1):
                         writer.append({'action': act_zeros,
-                                       'action_probs': act_zeros,
-                                       'action_mask': act_zeros,
+                                       'action_probs': act_probs_uni,
+                                       'action_mask': act_ones,
                                        'observation': obs_zeros,
                                        'total_reward': tf.constant(0, dtype=tf.float16),
                                        'temporal_mask': tf.constant(0, dtype=tf.float16),

@@ -37,9 +37,9 @@ def get_actor_critic(features_shape, actions_shape):
 
     all_probs = layers.Dense(actions_shape, activation="softmax")(x)
     spec_probs_unnorm = layers.Multiply()([all_probs, input_B])
-    probs = layers.Lambda(norm_probs)(spec_probs_unnorm)
+    probs = layers.Lambda(norm_probs, name="probs_output")(spec_probs_unnorm)
 
-    baseline = layers.Dense(1, activation="tanh")(x)
+    baseline = layers.Dense(1, activation="tanh", name="value_output")(x)
 
     model = keras.Model(inputs=[input_A, input_B], outputs=[probs, baseline])
     return model
