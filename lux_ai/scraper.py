@@ -3,13 +3,12 @@ import glob
 import json
 import random
 
-import numpy as np
 import tensorflow as tf
 import gym
 import reverb
 
 from lux_ai import tools
-from lux_gym.envs.lux.action_vectors import action_vector
+from lux_gym.envs.lux.action_vectors import action_vector, worker_action_mask, cart_action_mask, citytile_action_mask
 
 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -34,6 +33,7 @@ class Agent(abc.ABC):
             num_collectors: a total amount of collectors
         """
         self._n_players = 2
+        self._actions_number = len(action_vector)
         self._env_name = config["environment"]
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
@@ -61,12 +61,6 @@ class Agent(abc.ABC):
         reward, done are for the current observation.
         """
 
-        worker_action_mask = np.zeros(39, dtype=np.half)
-        worker_action_mask[3:22] = 1
-        cart_action_mask = np.zeros(39, dtype=np.half)
-        cart_action_mask[22:] = 1
-        citytile_action_mask = np.zeros(39, dtype=np.half)
-        citytile_action_mask[:3] = 1
         actions_masks = (worker_action_mask, cart_action_mask, citytile_action_mask)
 
         player1_data = {}
@@ -79,7 +73,7 @@ class Agent(abc.ABC):
         width, height = current_game_states[0].map.width, current_game_states[0].map.height
         shift = int((32 - width) / 2)  # to make all feature maps 32x32
 
-        def update_actions(actions, player_units_dict):
+        def update_units_actions(actions, player_units_dict):
             units_with_actions = []
             for action in actions:
                 action_list = action.split(" ")
@@ -90,7 +84,19 @@ class Agent(abc.ABC):
                     actions.append(f"m {key} c")
             return actions
 
-        def get_actions_dict(player_actions, player_units_dict):
+        def update_cts_actions(actions, player_cts_list):
+            units_with_actions = []
+            for action in actions:
+                action_list = action.split(" ")
+                if action_list[0] in ["r", "bw", "bc"]:
+                    x, y = int(action_list[1]), int(action_list[2])
+                    units_with_actions.append([x, y])
+            for ct in player_cts_list:
+                if ct not in units_with_actions:
+                    actions.append(f"idle {ct[0]} {ct[1]}")
+            return actions
+
+        def get_actions_dict(player_actions, player_units_dict_active, player_units_dict_all):
             actions_dict = {"workers": {}, "carts": {}, "city_tiles": {}}
             for action in player_actions:
                 action_list = action.split(" ")
@@ -98,7 +104,7 @@ class Agent(abc.ABC):
                 if action_list[0] == "m":  # "m {id} {direction}"
                     unit_name = action_list[1]  # "{id}"
                     direction = action_list[2]
-                    unit_type = "w" if player_units_dict[unit_name].is_worker() else "c"
+                    unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
                     action_vector_name = f"{unit_type}_m{direction}"  # "{unit_type}_m{direction}"
                     if unit_type == "w":
                         actions_dict["workers"][unit_name] = action_vector[action_vector_name]
@@ -108,8 +114,9 @@ class Agent(abc.ABC):
                     unit_name = action_list[1]
                     dest_name = action_list[2]
                     resourceType = action_list[3]
-                    unit_type = "w" if player_units_dict[unit_name].is_worker() else "c"
-                    direction = player_units_dict[unit_name].pos.direction_to(player_units_dict[dest_name].pos)
+                    unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
+                    direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
+                                                                                         dest_name].pos)
                     action_vector_name = f"{unit_type}_t{direction}{resourceType}"
                     if unit_type == "w":
                         actions_dict["workers"][unit_name] = action_vector[action_vector_name]
@@ -139,6 +146,11 @@ class Agent(abc.ABC):
                     unit_name = f"ct_{y + shift}_{x + shift}"
                     action_vector_name = "ct_build_cart"
                     actions_dict["city_tiles"][unit_name] = action_vector[action_vector_name]
+                elif action_list[0] == "idle":  # "idle {pos.x} {pos.y}"
+                    x, y = int(action_list[1]), int(action_list[2])
+                    unit_name = f"ct_{y + shift}_{x + shift}"
+                    action_vector_name = "ct_idle"
+                    actions_dict["city_tiles"][unit_name] = action_vector[action_vector_name]
                 else:
                     raise ValueError
             return actions_dict
@@ -163,25 +175,47 @@ class Agent(abc.ABC):
                 "updates"]
             # get units to know their types etc.
             player1 = current_game_states[0].players[observations[0].player]
-            player1_units_dict = {}
+            player1_units_dict_active = {}
+            player1_units_dict_all = {}
             player2 = current_game_states[1].players[(observations[0].player + 1) % 2]
-            player2_units_dict = {}
+            player2_units_dict_active = {}
+            player2_units_dict_all = {}
             for unit in player1.units:
+                player1_units_dict_all[unit.id] = unit
                 if unit.can_act():
-                    player1_units_dict[unit.id] = unit
+                    player1_units_dict_active[unit.id] = unit
             for unit in player2.units:
+                player2_units_dict_all[unit.id] = unit
                 if unit.can_act():
-                    player2_units_dict[unit.id] = unit
-            # get actions from a record, action for the current obs is in the next step
+                    player2_units_dict_active[unit.id] = unit
+            # get citytiles
+            player1_ct_list_active = []
+            for city in player1.cities.values():
+                for citytile in city.citytiles:
+                    if citytile.cooldown < 1:
+                        x_coord, y_coord = citytile.pos.x, citytile.pos.y
+                        player1_ct_list_active.append([x_coord, y_coord])
+            player2_ct_list_active = []
+            for city in player2.cities.values():
+                for citytile in city.citytiles:
+                    if citytile.cooldown < 1:
+                        x_coord, y_coord = citytile.pos.x, citytile.pos.y
+                        player2_ct_list_active.append([x_coord, y_coord])
+            # get actions from a record, action for the current obs is in the next step of data
             actions_1 = data["steps"][step + 1][0]["action"]
             actions_2 = data["steps"][step + 1][1]["action"]
             # if no action and unit can act, add "m {id} c"
-            actions_1 = update_actions(actions_1, player1_units_dict)
-            actions_2 = update_actions(actions_2, player2_units_dict)
+            actions_1_vec = actions_1.copy()
+            actions_2_vec = actions_2.copy()
+            actions_1_vec = update_units_actions(actions_1_vec, player1_units_dict_active)
+            actions_2_vec = update_units_actions(actions_2_vec, player2_units_dict_active)
+            # in no action and ct can act, add "idle {x} {y}"
+            actions_1_vec = update_cts_actions(actions_1_vec, player1_ct_list_active)
+            actions_2_vec = update_cts_actions(actions_2_vec, player2_ct_list_active)
 
             # get actions vector representation
-            actions_1_dict = get_actions_dict(actions_1, player1_units_dict)
-            actions_2_dict = get_actions_dict(actions_2, player2_units_dict)
+            actions_1_dict = get_actions_dict(actions_1_vec, player1_units_dict_active, player1_units_dict_all)
+            actions_2_dict = get_actions_dict(actions_2_vec, player2_units_dict_active, player2_units_dict_all)
 
             # probs are similar to actions
             player1_data = add_point(player1_data, actions_1_dict, actions_1_dict, proc_obsns[0], step)
@@ -206,9 +240,9 @@ class Agent(abc.ABC):
             final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
 
         obs_zeros = tf.zeros(self._feature_maps_shape, dtype=tf.float16)
-        act_zeros = tf.zeros(39, dtype=tf.float16)
-        act_ones = tf.ones(39, dtype=tf.float16)
-        act_probs_uni = tf.ones(39, dtype=tf.float16) * 1/39
+        act_zeros = tf.zeros(self._actions_number, dtype=tf.float16)
+        act_ones = tf.ones(self._actions_number, dtype=tf.float16)
+        act_probs_uni = tf.ones(self._actions_number, dtype=tf.float16) * 1/self._actions_number
 
         def send_data(player_data, total_reward):
             for data_object in player_data.values():
