@@ -3,7 +3,7 @@ from pathlib import Path
 
 import reverb
 
-from lux_ai import storage, collector, trainer, tools
+from lux_ai import storage, collector, scraper, trainer, tools
 from run_configuration import *
 
 main_config = CONF_ActorCritic
@@ -24,8 +24,11 @@ def one_call(input_data, checkpoint):
                                    num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
                                    n_points=config["n_points"], checkpointer=checkpointer)
     # init collector:
-    collector_agent = collector.Agent(config, buffer.table_names, buffer.server_port)
-    collector_agent.collect_once()
+    # collector_agent = collector.Agent(config, buffer.table_names, buffer.server_port)
+    # collector_agent.collect_once()
+    # init scraper:
+    scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
+    scraper_agent.scrape_once()
     # init trainer
     trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
     trainer_agent.imitate_once()
