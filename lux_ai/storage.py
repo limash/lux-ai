@@ -1,7 +1,9 @@
-import tensorflow as tf
+from typing import List
 
 import reverb
-from typing import List
+import tensorflow as tf
+
+from lux_gym.envs.lux.action_vectors import action_vector
 
 
 class UniformBuffer:
@@ -14,7 +16,7 @@ class UniformBuffer:
                  checkpointer=None):
 
         OBSERVATION_SPEC = tf.TensorSpec(observations_shape, tf.float16)
-        ACTION_SPEC = tf.TensorSpec([39], tf.float16)
+        ACTION_SPEC = tf.TensorSpec([len(action_vector)], tf.float16)
 
         self._min_size = min_size
         self._table_names = [f"uniform_table_{i}" for i in range(num_tables)]

@@ -8,7 +8,7 @@ CONF_ActorCritic = {
 CONF_Single = {
     "debug": True,
     "default_lr": 1e-8,
-    "n_points": 40,
+    "n_points": 30,
     "buffer_size": 1000000,
     "batch_size": 10,
     "init_episodes": 25,

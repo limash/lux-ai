@@ -159,17 +159,22 @@ class Agent(abc.ABC):
             for i, (acts, acts_prob, obs) in enumerate(zip(actions_dict.values(),
                                                            actions_probs.values(),
                                                            proc_obs.values())):
-                for (k, action), (_, action_probs), (_, observation) in zip(acts.items(),
-                                                                            acts_prob.items(),
-                                                                            obs.items()):
+                acts = dict(sorted(acts.items()))
+                acts_prob = dict(sorted(acts_prob.items()))
+                obs = dict(sorted(obs.items()))
+                for (k1, action), (k2, action_probs), (k3, observation) in zip(acts.items(),
+                                                                               acts_prob.items(),
+                                                                               obs.items()):
+                    assert k1 == k2 == k3
                     value = [action, action_probs, actions_masks[i], observation]
-                    if k in player_data.keys():
-                        player_data[k].append(value, current_step)
+                    if k1 in player_data.keys():
+                        player_data[k1].append(value, current_step)
                     else:
-                        player_data[k] = tools.DataValue()
-                        player_data[k].append(value, current_step)
+                        player_data[k1] = tools.DataValue()
+                        player_data[k1].append(value, current_step)
             return player_data
 
+        step = 0
         for step in range(0, configuration.episodeSteps):
             assert observations[0]["updates"] == observations[1]["updates"] == data["steps"][step][0]["observation"][
                 "updates"]
@@ -230,6 +235,7 @@ class Agent(abc.ABC):
         progress = tf.linspace(0., 1., step + 2)[:-1]
         progress = tf.cast(progress, dtype=tf.float16)
 
+        reward1, reward2 = data["rewards"][0], data["rewards"][1]
         if reward1 > reward2:
             final_reward_1 = tf.constant(1, dtype=tf.float16)
             final_reward_2 = tf.constant(-1, dtype=tf.float16)

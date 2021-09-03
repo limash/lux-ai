@@ -5,6 +5,7 @@ import tensorflow as tf
 import reverb
 
 from lux_ai import models, tools
+from lux_gym.envs.lux.action_vectors import action_vector
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -22,7 +23,7 @@ class Agent(abc.ABC):
         # self._lambda = config["lambda"]
 
         feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
-        actions_shape = 39
+        actions_shape = len(action_vector)
 
         self._model = models.get_actor_critic(feature_maps_shape, actions_shape)
 
@@ -42,22 +43,22 @@ class Agent(abc.ABC):
         self._batch_size = config["batch_size"]
 
     def imitate_once(self):
-        # for sample in self._dataset.take(1):
-        #     actions = sample.data['actions']
-        #     action_v = actions.numpy()
-        #     actions_probs = sample.data['actions_probs']
-        #     action_probs_v = actions_probs.numpy()
-        #     actions_masks = sample.data['actions_masks']
-        #     actions_masks_v = actions_masks.numpy()
-        #     observations = sample.data['observations']
-        #     observations_v = observations.numpy()
-        #     total_rewards = sample.data['total_rewards']
-        #     total_rewards_v = total_rewards.numpy()
-        #     temporal_masks = sample.data['temporal_masks']
-        #     temporal_masks_v = temporal_masks.numpy()
-        #     progresses = sample.data['progresses']
-        #     progresses_v = progresses.numpy()
-        # info = self._client.server_info()
+        for sample in self._dataset.take(1):
+            actions = sample.data['actions']
+            actions_v = actions.numpy()
+            actions_probs = sample.data['actions_probs']
+            actions_probs_v = actions_probs.numpy()
+            actions_masks = sample.data['actions_masks']
+            actions_masks_v = actions_masks.numpy()
+            observations = sample.data['observations']
+            observations_v = observations.numpy()
+            total_rewards = sample.data['total_rewards']
+            total_rewards_v = total_rewards.numpy()
+            temporal_masks = sample.data['temporal_masks']
+            temporal_masks_v = temporal_masks.numpy()
+            progresses = sample.data['progresses']
+            progresses_v = progresses.numpy()
+        info = self._client.server_info()
 
         imitate_dataset = self._dataset.map(lambda x: ((tf.cast(x.data['observations'], dtype=tf.float32),
                                                         tf.cast(x.data['actions_masks'], dtype=tf.float32)),
@@ -68,7 +69,7 @@ class Agent(abc.ABC):
         batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
-        for sample in dataset.take(1):
+        for sample in batched_dataset.take(1):
             observations = sample[0][0].numpy()
             actions_masks = sample[0][1].numpy()
             actions_probs = sample[1][0].numpy()
