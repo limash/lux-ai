@@ -60,12 +60,17 @@ class Agent(abc.ABC):
         #     progresses_v = progresses.numpy()
         # info = self._client.server_info()
 
-        imitate_dataset = self._dataset.map(lambda x: ((tf.cast(x.data['observations'], dtype=tf.float32),
-                                                        tf.cast(x.data['actions_masks'], dtype=tf.float32)),
-                                                       (tf.cast(x.data['actions_probs'], dtype=tf.float32),
-                                                        tf.cast(x.data['total_rewards'], dtype=tf.float32))
+        imitate_dataset = self._dataset.map(lambda x: ((x.data['observations'], x.data['actions_masks']),
+                                                       (x.data['actions_probs'], x.data['total_rewards'])
                                                        )
                                             )
+
+        # imitate_dataset = self._dataset.map(lambda x: ((tf.cast(x.data['observations'], dtype=tf.float32),
+        #                                                 tf.cast(x.data['actions_masks'], dtype=tf.float32)),
+        #                                                (tf.cast(x.data['actions_probs'], dtype=tf.float32),
+        #                                                 tf.cast(x.data['total_rewards'], dtype=tf.float32))
+        #                                                )
+        #                                     )
         batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
@@ -86,11 +91,11 @@ class Agent(abc.ABC):
                 "probs_output": tf.keras.losses.KLDivergence(),
                 "value_output": tf.keras.losses.MeanSquaredError()
             },
-            # metrics={
-            #     "probs_output": [tf.keras.metrics.CategoricalAccuracy()],
-            #     "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
-            #                      tf.keras.metrics.MeanAbsoluteError()]
-            # },
+            metrics={
+                "probs_output": [tf.keras.metrics.CategoricalAccuracy()],
+                # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
+                #                  tf.keras.metrics.MeanAbsoluteError()]
+            },
             # loss_weights={"probs_output": 2.0,
             #               "value_output": 1.0}
         )

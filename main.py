@@ -27,9 +27,9 @@ def one_call(input_data, checkpoint):
     # collector_agent = collector.Agent(config, buffer.table_names, buffer.server_port)
     # collector_agent.collect_once()
     # init scraper:
-    scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
+    # scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
     # scraper_agent.scrape_once()
-    scraper_agent.scrape_all()
+    # scraper_agent.scrape_all()
     # init trainer
     trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
     trainer_agent.imitate_once()
@@ -54,10 +54,7 @@ if __name__ == '__main__':
     except FileNotFoundError:
         init_data = None
 
-    try:
-        init_checkpoint = open('data/checkpoint', 'r').read()
-    except FileNotFoundError:
-        init_checkpoint = None
+    init_checkpoint = "./data/dmreverb_store/toad_brigade"
 
     if main_config["setup"] == "single":
         one_call(init_data, init_checkpoint)

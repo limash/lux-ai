@@ -112,7 +112,10 @@ class Agent(abc.ABC):
                 if action_list[0] == "m":  # "m {id} {direction}"
                     unit_name = action_list[1]  # "{id}"
                     direction = action_list[2]
-                    unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
+                    try:
+                        unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
+                    except KeyError:  # it occurs when there is not valid action proposed
+                        continue
                     action_vector_name = f"{unit_type}_m{direction}"  # "{unit_type}_m{direction}"
                     if unit_type == "w":
                         actions_dict["workers"][unit_name] = action_vector[action_vector_name]
@@ -122,7 +125,10 @@ class Agent(abc.ABC):
                     unit_name = action_list[1]
                     dest_name = action_list[2]
                     resourceType = action_list[3]
-                    unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
+                    try:
+                        unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
+                    except KeyError:  # it occurs when there is not valid action proposed
+                        continue
                     direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
                                                                                          dest_name].pos)
                     action_vector_name = f"{unit_type}_t{direction}{resourceType}"
@@ -174,12 +180,12 @@ class Agent(abc.ABC):
                                                                                acts_prob.items(),
                                                                                obs.items()):
                     assert k1 == k2 == k3
-                    value = [action, action_probs, actions_masks[i], observation]
+                    point_value = [action, action_probs, actions_masks[i], observation]
                     if k1 in player_data.keys():
-                        player_data[k1].append(value, current_step)
+                        player_data[k1].append(point_value, current_step)
                     else:
                         player_data[k1] = tools.DataValue()
-                        player_data[k1].append(value, current_step)
+                        player_data[k1].append(point_value, current_step)
             return player_data
 
         step = 0
@@ -339,5 +345,11 @@ class Agent(abc.ABC):
     def scrape_all(self):
         for file_name in self._files:
             with open(file_name, "r") as read_file:
+                print(f"File is {file_name}")
                 data = json.load(read_file)
             self._scrape(data, team_name="Toad Brigade")
+        try:
+            checkpoint = self._client.checkpoint()
+        except RuntimeError as err:
+            print(err)
+            checkpoint = err
