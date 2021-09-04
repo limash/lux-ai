@@ -50,7 +50,7 @@ class Agent(abc.ABC):
 
         self._files = glob.glob("./data/saved_episodes/*.json")
 
-    def _scrape(self, data):
+    def _scrape(self, data, team_name=None):
         """
         Collects trajectories from an episode to the buffer.
 
@@ -60,6 +60,14 @@ class Agent(abc.ABC):
         action is a response for the current observation,
         reward, done are for the current observation.
         """
+        team_of_interest = -1
+        if team_name:
+            if data["info"]["TeamNames"][0] == team_name:
+                team_of_interest = 1
+            elif data["info"]["TeamNames"][1] == team_name:
+                team_of_interest = 2
+            else:
+                return
 
         actions_masks = (worker_action_mask, cart_action_mask, citytile_action_mask)
 
@@ -232,9 +240,13 @@ class Agent(abc.ABC):
             if any(dones):
                 break
 
-        # count = 0
-        # for value in list(player1_data.values()) + list(player2_data.values()):
-        #     count += len(value.data)
+        count_team_1 = 0
+        for value in list(player1_data.values()):
+            count_team_1 += len(value.data)
+        count_team_2 = 0
+        for value in list(player2_data.values()):
+            count_team_2 += len(value.data)
+        print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
 
         progress = tf.linspace(0., 1., step + 2)[:-1]
         progress = tf.cast(progress, dtype=tf.float16)
@@ -310,11 +322,22 @@ class Agent(abc.ABC):
                             )
                     writer.end_episode()
 
-        send_data(player1_data, final_reward_1)
-        send_data(player2_data, final_reward_2)
+        if team_of_interest == -1:
+            send_data(player1_data, final_reward_1)
+            send_data(player2_data, final_reward_2)
+        elif team_of_interest == 1:
+            send_data(player1_data, final_reward_1)
+        elif team_of_interest == 2:
+            send_data(player2_data, final_reward_2)
 
     def scrape_once(self):
         file_name = random.sample(self._files, 1)[0]
         with open(file_name, "r") as read_file:
             data = json.load(read_file)
         self._scrape(data)
+
+    def scrape_all(self):
+        for file_name in self._files:
+            with open(file_name, "r") as read_file:
+                data = json.load(read_file)
+            self._scrape(data, team_name="Toad Brigade")

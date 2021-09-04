@@ -28,7 +28,8 @@ def one_call(input_data, checkpoint):
     # collector_agent.collect_once()
     # init scraper:
     scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
-    scraper_agent.scrape_once()
+    # scraper_agent.scrape_once()
+    scraper_agent.scrape_all()
     # init trainer
     trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
     trainer_agent.imitate_once()
