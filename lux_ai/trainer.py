@@ -43,22 +43,22 @@ class Agent(abc.ABC):
         self._batch_size = config["batch_size"]
 
     def imitate_once(self):
-        for sample in self._dataset.take(1):
-            actions = sample.data['actions']
-            actions_v = actions.numpy()
-            actions_probs = sample.data['actions_probs']
-            actions_probs_v = actions_probs.numpy()
-            actions_masks = sample.data['actions_masks']
-            actions_masks_v = actions_masks.numpy()
-            observations = sample.data['observations']
-            observations_v = observations.numpy()
-            total_rewards = sample.data['total_rewards']
-            total_rewards_v = total_rewards.numpy()
-            temporal_masks = sample.data['temporal_masks']
-            temporal_masks_v = temporal_masks.numpy()
-            progresses = sample.data['progresses']
-            progresses_v = progresses.numpy()
-        info = self._client.server_info()
+        # for sample in self._dataset.take(1):
+        #     actions = sample.data['actions']
+        #     actions_v = actions.numpy()
+        #     actions_probs = sample.data['actions_probs']
+        #     actions_probs_v = actions_probs.numpy()
+        #     actions_masks = sample.data['actions_masks']
+        #     actions_masks_v = actions_masks.numpy()
+        #     observations = sample.data['observations']
+        #     observations_v = observations.numpy()
+        #     total_rewards = sample.data['total_rewards']
+        #     total_rewards_v = total_rewards.numpy()
+        #     temporal_masks = sample.data['temporal_masks']
+        #     temporal_masks_v = temporal_masks.numpy()
+        #     progresses = sample.data['progresses']
+        #     progresses_v = progresses.numpy()
+        # info = self._client.server_info()
 
         imitate_dataset = self._dataset.map(lambda x: ((tf.cast(x.data['observations'], dtype=tf.float32),
                                                         tf.cast(x.data['actions_masks'], dtype=tf.float32)),
@@ -69,16 +69,16 @@ class Agent(abc.ABC):
         batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
-        for sample in batched_dataset.take(1):
-            observations = sample[0][0].numpy()
-            actions_masks = sample[0][1].numpy()
-            actions_probs = sample[1][0].numpy()
-            total_rewards = sample[1][1].numpy()
+        # for sample in batched_dataset.take(1):
+        #     observations = sample[0][0].numpy()
+        #     actions_masks = sample[0][1].numpy()
+        #     actions_probs = sample[1][0].numpy()
+        #     total_rewards = sample[1][1].numpy()
 
-            probs_output, value_output = self._model((observations, actions_masks))
-            probs_output_v = probs_output.numpy()
-            value_output_v = value_output.numpy()
-            loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+        #     probs_output, value_output = self._model((observations, actions_masks))
+        #     probs_output_v = probs_output.numpy()
+        #     value_output_v = value_output.numpy()
+        #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5, clipnorm=4.),

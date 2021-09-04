@@ -232,6 +232,10 @@ class Agent(abc.ABC):
             if any(dones):
                 break
 
+        # count = 0
+        # for value in list(player1_data.values()) + list(player2_data.values()):
+        #     count += len(value.data)
+
         progress = tf.linspace(0., 1., step + 2)[:-1]
         progress = tf.cast(progress, dtype=tf.float16)
 
