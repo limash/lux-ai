@@ -1,6 +1,7 @@
 import abc
 import pickle
 
+import numpy as np
 import tensorflow as tf
 import reverb
 
@@ -25,6 +26,12 @@ class Agent(abc.ABC):
         feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         actions_shape = len(action_vector)
         self._model = models.get_actor_critic(feature_maps_shape, actions_shape)
+
+        class_weights = np.ones(actions_shape, dtype=np.single)
+        class_weights[3] = 0.01
+        class_weights[8] = 0.1
+        class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+        self._class_weights = tf.expand_dims(class_weights, axis=0)
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -73,21 +80,25 @@ class Agent(abc.ABC):
         batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
-        for sample in batched_dataset.take(1):
-            observations = sample[0][0].numpy()
-            actions_masks = sample[0][1].numpy()
-            actions_probs = sample[1][0].numpy()
-            total_rewards = sample[1][1].numpy()
+        loss_function = tools.skewed_kldivergence_loss(self._class_weights)
+
+        # for sample in dataset.take(1):
+        #     observations = sample[0][0].numpy()
+        #     actions_masks = sample[0][1].numpy()
+        #     actions_probs = sample[1][0].numpy()
+        #     total_rewards = sample[1][1].numpy()
 
         #     probs_output, value_output = self._model((observations, actions_masks))
         #     probs_output_v = probs_output.numpy()
         #     value_output_v = value_output.numpy()
+
+        #     skewed_loss = loss_function(sample[1][0], probs_output)
         #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6, clipnorm=4.),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
             loss={
-                "probs_output": tf.keras.losses.KLDivergence(),
+                "probs_output": loss_function,  # tf.keras.losses.KLDivergence(),
                 "value_output": tf.keras.losses.MeanSquaredError()
             },
             metrics={
@@ -95,11 +106,11 @@ class Agent(abc.ABC):
                 # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
                 #                  tf.keras.metrics.MeanAbsoluteError()]
             },
-            # loss_weights={"probs_output": 2.0,
-            #               "value_output": 1.0}
+            loss_weights={"probs_output": 2.0,
+                          "value_output": 0.1}
         )
 
-        self._model.fit(dataset, steps_per_epoch=100, epochs=20)
+        self._model.fit(dataset, steps_per_epoch=100, epochs=50)
         weights = self._model.get_weights()
         data = {
             'weights': weights,

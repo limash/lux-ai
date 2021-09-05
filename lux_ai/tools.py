@@ -1,10 +1,29 @@
 import tensorflow as tf
+from tensorflow.keras import backend
 import ray
 import gym
 
 from lux_gym.envs.lux.action_vectors import worker_action_mask, cart_action_mask, citytile_action_mask
 
 actions_masks = (worker_action_mask, cart_action_mask, citytile_action_mask)
+
+
+def skewed_kldivergence_loss(class_weight):
+
+    def loss_function(y_true, y_pred):
+        y_pred = tf.convert_to_tensor(y_pred)
+        y_true = tf.cast(y_true, y_pred.dtype)
+        y_true = backend.clip(y_true, backend.epsilon(), 1)
+        y_pred = backend.clip(y_pred, backend.epsilon(), 1)
+        # temp = y_true * tf.math.log(y_true / y_pred)
+        # temp_v = temp.numpy()
+        # temp_sum = tf.reduce_sum(temp, axis=-1)
+        # result = temp * class_weight
+        # result_v = result.numpy()
+        # result_sum = tf.reduce_sum(result, axis=-1)
+        return tf.reduce_sum(class_weight * y_true * tf.math.log(y_true / y_pred), axis=-1)
+
+    return loss_function
 
 
 def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
