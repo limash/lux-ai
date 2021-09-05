@@ -347,7 +347,7 @@ class Agent(abc.ABC):
             with open(file_name, "r") as read_file:
                 print(f"File is {file_name}")
                 data = json.load(read_file)
-            self._scrape(data, team_name="Toad Brigade")
+            self._scrape(data, team_name="Looking for Halite")
         try:
             checkpoint = self._client.checkpoint()
         except RuntimeError as err:

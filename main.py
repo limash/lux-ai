@@ -27,12 +27,12 @@ def one_call(input_data, checkpoint):
     # collector_agent = collector.Agent(config, buffer.table_names, buffer.server_port)
     # collector_agent.collect_once()
     # init scraper:
-    # scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
+    scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
     # scraper_agent.scrape_once()
-    # scraper_agent.scrape_all()
+    scraper_agent.scrape_all()
     # init trainer
-    trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
-    trainer_agent.imitate_once()
+    # trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
+    # trainer_agent.imitate()
     # init single_agent, which collects and trains
 
     # data = {
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     except FileNotFoundError:
         init_data = None
 
-    init_checkpoint = "./data/dmreverb_store/toad_brigade"
+    init_checkpoint = None  # "./data/dmreverb_store/looking_for_halite/checkpoint"
 
     if main_config["setup"] == "single":
         one_call(init_data, init_checkpoint)

@@ -24,7 +24,6 @@ class Agent(abc.ABC):
 
         feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         actions_shape = len(action_vector)
-
         self._model = models.get_actor_critic(feature_maps_shape, actions_shape)
 
         if data is not None:
@@ -42,7 +41,7 @@ class Agent(abc.ABC):
         self._client = reverb.Client(f'localhost:{buffer_server_port}')
         self._batch_size = config["batch_size"]
 
-    def imitate_once(self):
+    def imitate(self):
         # for sample in self._dataset.take(1):
         #     actions = sample.data['actions']
         #     actions_v = actions.numpy()
@@ -74,11 +73,11 @@ class Agent(abc.ABC):
         batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
-        # for sample in batched_dataset.take(1):
-        #     observations = sample[0][0].numpy()
-        #     actions_masks = sample[0][1].numpy()
-        #     actions_probs = sample[1][0].numpy()
-        #     total_rewards = sample[1][1].numpy()
+        for sample in batched_dataset.take(1):
+            observations = sample[0][0].numpy()
+            actions_masks = sample[0][1].numpy()
+            actions_probs = sample[1][0].numpy()
+            total_rewards = sample[1][1].numpy()
 
         #     probs_output, value_output = self._model((observations, actions_masks))
         #     probs_output_v = probs_output.numpy()
@@ -86,7 +85,7 @@ class Agent(abc.ABC):
         #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5, clipnorm=4.),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6, clipnorm=4.),
             loss={
                 "probs_output": tf.keras.losses.KLDivergence(),
                 "value_output": tf.keras.losses.MeanSquaredError()
@@ -100,8 +99,13 @@ class Agent(abc.ABC):
             #               "value_output": 1.0}
         )
 
-        self._model.fit(dataset, epochs=1)
-        self._model.evaluate(dataset)
+        self._model.fit(dataset, steps_per_epoch=100, epochs=20)
+        weights = self._model.get_weights()
+        data = {
+            'weights': weights,
+        }
+        with open(f'data/data.pickle', 'wb') as f:
+            pickle.dump(data, f, protocol=4)
 
         print("imitation done")
 
