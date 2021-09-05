@@ -8,7 +8,8 @@ import gym
 import reverb
 
 from lux_ai import tools
-from lux_gym.envs.lux.action_vectors import action_vector, worker_action_mask, cart_action_mask, citytile_action_mask
+from lux_ai.storage import send_data
+from lux_gym.envs.lux.action_vectors import action_vector
 
 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -68,8 +69,6 @@ class Agent(abc.ABC):
                 team_of_interest = 2
             else:
                 return
-
-        actions_masks = (worker_action_mask, cart_action_mask, citytile_action_mask)
 
         player1_data = {}
         player2_data = {}
@@ -169,25 +168,6 @@ class Agent(abc.ABC):
                     raise ValueError
             return actions_dict
 
-        def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
-            for i, (acts, acts_prob, obs) in enumerate(zip(actions_dict.values(),
-                                                           actions_probs.values(),
-                                                           proc_obs.values())):
-                acts = dict(sorted(acts.items()))
-                acts_prob = dict(sorted(acts_prob.items()))
-                obs = dict(sorted(obs.items()))
-                for (k1, action), (k2, action_probs), (k3, observation) in zip(acts.items(),
-                                                                               acts_prob.items(),
-                                                                               obs.items()):
-                    assert k1 == k2 == k3
-                    point_value = [action, action_probs, actions_masks[i], observation]
-                    if k1 in player_data.keys():
-                        player_data[k1].append(point_value, current_step)
-                    else:
-                        player_data[k1] = tools.DataValue()
-                        player_data[k1].append(point_value, current_step)
-            return player_data
-
         step = 0
         for step in range(0, configuration.episodeSteps):
             assert observations[0]["updates"] == observations[1]["updates"] == data["steps"][step][0]["observation"][
@@ -237,8 +217,8 @@ class Agent(abc.ABC):
             actions_2_dict = get_actions_dict(actions_2_vec, player2_units_dict_active, player2_units_dict_all)
 
             # probs are similar to actions
-            player1_data = add_point(player1_data, actions_1_dict, actions_1_dict, proc_obsns[0], step)
-            player2_data = add_point(player2_data, actions_2_dict, actions_2_dict, proc_obsns[1], step)
+            player1_data = tools.add_point(player1_data, actions_1_dict, actions_1_dict, proc_obsns[0], step)
+            player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_dict, proc_obsns[1], step)
 
             dones, observations, proc_obsns = environment.step_process((actions_1, actions_2))
             current_game_states = environment.game_states
@@ -254,9 +234,6 @@ class Agent(abc.ABC):
             count_team_2 += len(value.data)
         print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
 
-        progress = tf.linspace(0., 1., step + 2)[:-1]
-        progress = tf.cast(progress, dtype=tf.float16)
-
         reward1, reward2 = data["rewards"][0], data["rewards"][1]
         if reward1 > reward2:
             final_reward_1 = tf.constant(1, dtype=tf.float16)
@@ -267,74 +244,22 @@ class Agent(abc.ABC):
         else:
             final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
 
-        obs_zeros = tf.zeros(self._feature_maps_shape, dtype=tf.float16)
-        act_zeros = tf.zeros(self._actions_number, dtype=tf.float16)
-        act_ones = tf.ones(self._actions_number, dtype=tf.float16)
-        act_probs_uni = tf.ones(self._actions_number, dtype=tf.float16) * 1/self._actions_number
+        progress = tf.linspace(0., 1., step + 2)[:-1]
+        progress = tf.cast(progress, dtype=tf.float16)
 
-        def send_data(player_data, total_reward):
-            for data_object in player_data.values():
-                entity_temporal_data_list, current_step = data_object.data, data_object.step
-                entity_temporal_data_list = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.float16),
-                                                                  entity_temporal_data_list)
-                with self._client.trajectory_writer(num_keep_alive_refs=self._n_points) as writer:
-                    for i, data_entry in enumerate(entity_temporal_data_list):
-                        act, act_probs, act_mask, obs = data_entry
-                        writer.append({'action': act,
-                                       'action_probs': act_probs,
-                                       'action_mask': act_mask,
-                                       'observation': obs,
-                                       'total_reward': total_reward,
-                                       'temporal_mask': tf.constant(1, dtype=tf.float16),
-                                       'progress': progress[current_step[i]]
-                                       })
-                        if i >= self._n_points - 1:
-                            writer.create_item(
-                                table=self._table_names[0],
-                                priority=1.5,
-                                trajectory={
-                                    'actions': writer.history['action'][-self._n_points:],
-                                    'actions_probs': writer.history['action_probs'][-self._n_points:],
-                                    'actions_masks': writer.history['action_mask'][-self._n_points:],
-                                    'observations': writer.history['observation'][-self._n_points:],
-                                    'total_rewards': writer.history['total_reward'][-self._n_points:],
-                                    'temporal_masks': writer.history['temporal_mask'][-self._n_points:],
-                                    'progresses': writer.history['progress'][-self._n_points:],
-                                }
-                            )
-                    i += 1
-                    for j in range(i, i + self._n_points - 1):
-                        writer.append({'action': act_zeros,
-                                       'action_probs': act_probs_uni,
-                                       'action_mask': act_ones,
-                                       'observation': obs_zeros,
-                                       'total_reward': tf.constant(0, dtype=tf.float16),
-                                       'temporal_mask': tf.constant(0, dtype=tf.float16),
-                                       'progress': tf.constant(1, dtype=tf.float16)
-                                       })
-                        if j >= self._n_points - 1:
-                            writer.create_item(
-                                table=self._table_names[0],
-                                priority=1.5,
-                                trajectory={
-                                    'actions': writer.history['action'][-self._n_points:],
-                                    'actions_probs': writer.history['action_probs'][-self._n_points:],
-                                    'actions_masks': writer.history['action_mask'][-self._n_points:],
-                                    'observations': writer.history['observation'][-self._n_points:],
-                                    'total_rewards': writer.history['total_reward'][-self._n_points:],
-                                    'temporal_masks': writer.history['temporal_mask'][-self._n_points:],
-                                    'progresses': writer.history['progress'][-self._n_points:],
-                                }
-                            )
-                    writer.end_episode()
-
+        arguments_1 = (player1_data, final_reward_1, progress,
+                       self._feature_maps_shape, self._actions_number, self._n_points,
+                       self._client, self._table_names)
+        arguments_2 = (player2_data, final_reward_2, progress,
+                       self._feature_maps_shape, self._actions_number, self._n_points,
+                       self._client, self._table_names)
         if team_of_interest == -1:
-            send_data(player1_data, final_reward_1)
-            send_data(player2_data, final_reward_2)
+            send_data(*arguments_1)
+            send_data(*arguments_2)
         elif team_of_interest == 1:
-            send_data(player1_data, final_reward_1)
+            send_data(*arguments_1)
         elif team_of_interest == 2:
-            send_data(player2_data, final_reward_2)
+            send_data(*arguments_2)
 
     def scrape_once(self):
         file_name = random.sample(self._files, 1)[0]

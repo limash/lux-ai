@@ -11,6 +11,70 @@ if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
+def send_data(player_data, total_reward, progress,
+              feature_maps_shape, actions_number, n_points,
+              client, table_names):
+    obs_zeros = tf.zeros(feature_maps_shape, dtype=tf.float16)
+    act_zeros = tf.zeros(actions_number, dtype=tf.float16)
+    act_ones = tf.ones(actions_number, dtype=tf.float16)
+    act_probs_uni = tf.ones(actions_number, dtype=tf.float16) * 1 / actions_number
+
+    for data_object in player_data.values():
+        entity_temporal_data_list, current_step = data_object.data, data_object.step
+        entity_temporal_data_list = tf.nest.map_structure(lambda x: tf.convert_to_tensor(x, dtype=tf.float16),
+                                                          entity_temporal_data_list)
+        with client.trajectory_writer(num_keep_alive_refs=n_points) as writer:
+            for i, data_entry in enumerate(entity_temporal_data_list):
+                act, act_probs, act_mask, obs = data_entry
+                writer.append({'action': act,
+                               'action_probs': act_probs,
+                               'action_mask': act_mask,
+                               'observation': obs,
+                               'total_reward': total_reward,
+                               'temporal_mask': tf.constant(1, dtype=tf.float16),
+                               'progress': progress[current_step[i]]
+                               })
+                if i >= n_points - 1:
+                    writer.create_item(
+                        table=table_names[0],
+                        priority=1.5,
+                        trajectory={
+                            'actions': writer.history['action'][-n_points:],
+                            'actions_probs': writer.history['action_probs'][-n_points:],
+                            'actions_masks': writer.history['action_mask'][-n_points:],
+                            'observations': writer.history['observation'][-n_points:],
+                            'total_rewards': writer.history['total_reward'][-n_points:],
+                            'temporal_masks': writer.history['temporal_mask'][-n_points:],
+                            'progresses': writer.history['progress'][-n_points:],
+                        }
+                    )
+            i += 1
+            for j in range(i, i + n_points - 1):
+                writer.append({'action': act_zeros,
+                               'action_probs': act_probs_uni,
+                               'action_mask': act_ones,
+                               'observation': obs_zeros,
+                               'total_reward': tf.constant(0, dtype=tf.float16),
+                               'temporal_mask': tf.constant(0, dtype=tf.float16),
+                               'progress': tf.constant(1, dtype=tf.float16)
+                               })
+                if j >= n_points - 1:
+                    writer.create_item(
+                        table=table_names[0],
+                        priority=1.5,
+                        trajectory={
+                            'actions': writer.history['action'][-n_points:],
+                            'actions_probs': writer.history['action_probs'][-n_points:],
+                            'actions_masks': writer.history['action_mask'][-n_points:],
+                            'observations': writer.history['observation'][-n_points:],
+                            'total_rewards': writer.history['total_reward'][-n_points:],
+                            'temporal_masks': writer.history['temporal_mask'][-n_points:],
+                            'progresses': writer.history['progress'][-n_points:],
+                        }
+                    )
+            writer.end_episode()
+
+
 class UniformBuffer:
     def __init__(self,
                  observations_shape,

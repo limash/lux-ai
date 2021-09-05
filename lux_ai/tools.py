@@ -2,6 +2,30 @@ import tensorflow as tf
 import ray
 import gym
 
+from lux_gym.envs.lux.action_vectors import worker_action_mask, cart_action_mask, citytile_action_mask
+
+actions_masks = (worker_action_mask, cart_action_mask, citytile_action_mask)
+
+
+def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
+    for i, (acts, acts_prob, obs) in enumerate(zip(actions_dict.values(),
+                                                   actions_probs.values(),
+                                                   proc_obs.values())):
+        acts = dict(sorted(acts.items()))
+        acts_prob = dict(sorted(acts_prob.items()))
+        obs = dict(sorted(obs.items()))
+        for (k1, action), (k2, action_probs), (k3, observation) in zip(acts.items(),
+                                                                       acts_prob.items(),
+                                                                       obs.items()):
+            assert k1 == k2 == k3
+            point_value = [action, action_probs, actions_masks[i], observation]
+            if k1 in player_data.keys():
+                player_data[k1].append(point_value, current_step)
+            else:
+                player_data[k1] = DataValue()
+                player_data[k1].append(point_value, current_step)
+    return player_data
+
 
 def merge_first_two_dimensions(input1, input2):
     (tensor1, tensor2), (tensor3, tensor4) = input1, input2
