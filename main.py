@@ -1,7 +1,7 @@
 import pickle
-from pathlib import Path
+# from pathlib import Path
 
-import reverb
+# import reverb
 
 from lux_ai import storage, collector, scraper, trainer, tools
 from run_configuration import *
@@ -24,15 +24,15 @@ def one_call(input_data):  # , checkpoint):
     #                                num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
     #                                n_points=config["n_points"], checkpointer=checkpointer)
     # init collector:
-    collector_agent = collector.Agent(config)
-    collector_agent.collect_and_store()
+    # collector_agent = collector.Agent(config)
+    # collector_agent.collect_and_store()
     # init scraper:
     # scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
     # scraper_agent.scrape_once()
     # scraper_agent.scrape_all()
     # init trainer
-    # trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
-    # trainer_agent.imitate()
+    trainer_agent = trainer.Agent(config, input_data)
+    trainer_agent.imitate()
     # init single_agent, which collects and trains
 
     # data = {
