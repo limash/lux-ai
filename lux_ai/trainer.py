@@ -74,35 +74,25 @@ class Agent(abc.ABC):
         #                                     )
         # batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         # dataset = batched_dataset.map(tools.merge_first_two_dimensions)
-        # for sample in dataset.take(1):
-        #     observations = sample[0][0].numpy()
-        #     actions_masks = sample[0][1].numpy()
-        #     actions_probs = sample[1][0].numpy()
-        #     total_rewards = sample[1][1].numpy()
-        #     probs_output, value_output = self._model((observations, actions_masks))
-        #     probs_output_v = probs_output.numpy()
-        #     value_output_v = value_output.numpy()
-        #     skewed_loss = loss_function(sample[1][0], probs_output)
-        #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         AUTO = tf.data.experimental.AUTOTUNE
 
         def read_tfrecord(example):
             features = {
-                "action": tf.io.FixedLenFeature([], tf.string),  # tf.string = bytestring (not text string)
-                "action_probs": tf.io.FixedLenFeature([], tf.string),
-                "action_mask": tf.io.FixedLenFeature([], tf.string),
                 "observation": tf.io.FixedLenFeature([], tf.string),
+                "action_mask": tf.io.FixedLenFeature([], tf.string),
+                "action_probs": tf.io.FixedLenFeature([], tf.string),
+                "reward": tf.io.FixedLenFeature([], tf.float32),
             }
             # decode the TFRecord
             example = tf.io.parse_single_example(example, features)
 
-            action = tf.io.parse_tensor(example["action"], tf.float16)
-            action_probs = tf.io.parse_tensor(example["action_probs"], tf.float16)
-            action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
             observation = tf.io.parse_tensor(example["observation"], tf.float16)
+            action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
+            action_probs = tf.io.parse_tensor(example["action_probs"], tf.float16)
+            reward = example["reward"]
 
-            return action, action_probs, action_mask, observation
+            return observation, action_mask, action_probs, reward
 
         def read_records():
             # read from TFRecords. For optimal performance, read from multiple
@@ -120,12 +110,25 @@ class Agent(abc.ABC):
             return ds
 
         dataset = read_records()
-
-        for parsed_record in dataset.take(10):
-            print(repr(parsed_record))
-
-        dataset = dataset.map(lambda x: ((x[0], x[1]), (x[2], x[3])))
+        # dataset = dataset.map(lambda x1, x2, x3, x4: ((x1, x2), (x3, x4)))
+        dataset = dataset.map(lambda x1, x2, x3, x4: ((tf.cast(x1, dtype=tf.float32),
+                                                       tf.cast(x2, dtype=tf.float32)),
+                                                      (tf.cast(x3, dtype=tf.float32),
+                                                       tf.cast(x4, dtype=tf.float32))
+                                         )
+                              )
         dataset = dataset.batch(self._batch_size, drop_remainder=True)
+
+        for sample in dataset.take(1):
+            observations = sample[0][0].numpy()
+            actions_masks = sample[0][1].numpy()
+            actions_probs = sample[1][0].numpy()
+            total_rewards = sample[1][1].numpy()
+            probs_output, value_output = self._model((observations, actions_masks))
+            probs_output_v = probs_output.numpy()
+            value_output_v = value_output.numpy()
+            # skewed_loss = loss_function(sample[1][0], probs_output)
+            # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         loss_function = tools.skewed_kldivergence_loss(self._class_weights)
 

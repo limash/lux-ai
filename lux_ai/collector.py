@@ -1,7 +1,7 @@
 import abc
 import random
 
-# import numpy as np
+import numpy as np
 import tensorflow as tf
 import gym
 # import reverb
@@ -43,7 +43,7 @@ class Agent(abc.ABC):
             # num_collectors: a total amount of collectors
         """
         self._n_players = 2
-        self._environment = gym.make(config["environment"])
+        self._env_name = config["environment"]
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_number = len(action_vector)
@@ -84,9 +84,10 @@ class Agent(abc.ABC):
         player1_data = {}
         player2_data = {}
 
-        observations = self._environment.reset()
-        configuration = self._environment.configuration
-        game_states = self._environment.game_states
+        environment = gym.make(self._env_name)
+        observations = environment.reset()
+        configuration = environment.configuration
+        game_states = environment.game_states
         actions_1, actions_1_dict, actions_1_probs, proc_obs1, reward1 = agent(observations[0],
                                                                                configuration, game_states[0])
         actions_2, actions_2_dict, actions_2_probs, proc_obs2, reward2 = agent(observations[1],
@@ -97,8 +98,8 @@ class Agent(abc.ABC):
         player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_probs, proc_obs2, step)
 
         for step in range(1, configuration.episodeSteps):
-            dones, observations = self._environment.step((actions_1, actions_2))
-            game_states = self._environment.game_states
+            dones, observations = environment.step((actions_1, actions_2))
+            game_states = environment.game_states
             actions_1, actions_1_dict, actions_1_probs, proc_obs1, reward1 = agent(observations[0],
                                                                                    configuration, game_states[0])
             actions_2, actions_2_dict, actions_2_probs, proc_obs2, reward2 = agent(observations[1],
@@ -127,57 +128,69 @@ class Agent(abc.ABC):
         policy = random.sample(self._policies_pool, 1)[0]
         return self._collect(policy)
 
-    def collect_and_store(self):
-        (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
-        data_gen = lambda: ((step[0], step[1], step[2], step[3])
-                            for unit in player1_data.values()
-                            for step in unit.data)
+    def collect_and_store(self, number_of_collects):
+        for i in range(number_of_collects):
+            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
 
-        dataset = tf.data.Dataset.from_generator(
-            data_gen,
-            output_signature=(
-                tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
-                tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
-                tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
-                tf.TensorSpec(shape=self._feature_maps_shape, dtype=tf.float16)))
+            def data_gen():
+                for j, player_data in enumerate((player1_data, player2_data)):
+                    final_reward = final_reward_1 if j == 0 else final_reward_2
+                    for unit in player_data.values():
+                        for step in unit.data:
+                            # point_value = [action, action_probs, actions_mask, observation]
+                            # store observation, action_mask, action_probs, reward
+                            yield step[3], step[2], step[1], final_reward
 
-        # foo = list(dataset.take(1))
-        # Three data types can be stored in TFRecords: bytestrings, integers and floats
-        # They are always stored as lists, a single data element is a list of size 1
+            # data_gen = lambda: ((step[3], step[2], step[1], )
+            #                     for player_data in (player1_data, player2_data)
+            #                     for unit in player_data.values()
+            #                     for step in unit.data)
 
-        def _bytestring_feature(list_of_bytestrings):
-            return tf.train.Feature(bytes_list=tf.train.BytesList(value=list_of_bytestrings))
+            dataset = tf.data.Dataset.from_generator(
+                data_gen,
+                output_signature=(
+                    tf.TensorSpec(shape=self._feature_maps_shape, dtype=tf.float16),
+                    tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
+                    tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
+                    tf.TensorSpec(shape=(), dtype=tf.float16),
+                    ))
 
-        def to_tfrecord(action, action_probs, action_mask, observation):
+            # foo = list(dataset.take(1))
+            # Three data types can be stored in TFRecords: bytestrings, integers and floats
+            # They are always stored as lists, a single data element is a list of size 1
 
-            feature = {
-                "action": _bytestring_feature([action]),
-                "action_probs": _bytestring_feature([action_probs]),
-                "action_mask": _bytestring_feature([action_mask]),
-                "observation": _bytestring_feature([observation]),
-            }
-            return tf.train.Example(features=tf.train.Features(feature=feature))
+            def _bytestring_feature(list_of_bytestrings):
+                return tf.train.Feature(bytes_list=tf.train.BytesList(value=list_of_bytestrings))
 
-        def write_tfrecords(ds):
-            print("Writing TFRecords")
-            filename = f"data/tfrecords/episode1.tfrec"
+            def _float_feature(list_of_floats):
+                return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
-            with tf.io.TFRecordWriter(filename) as out_file:
-                for i, (action, action_probs, action_mask, observation) in enumerate(ds):
-                    serial_action = tf.io.serialize_tensor(action)
-                    serial_action_probs = tf.io.serialize_tensor(action_probs)
-                    serial_action_mask = tf.io.serialize_tensor(action_mask)
-                    serial_observation = tf.io.serialize_tensor(observation)
-                    example = to_tfrecord(serial_action.numpy(),
-                                          serial_action_probs.numpy(),
-                                          serial_action_mask.numpy(),
-                                          serial_observation.numpy())
-                    out_file.write(example.SerializeToString())
-                print("Wrote file {} containing {} records".format(filename, i))
+            def to_tfrecord(reward, action_probs, action_mask, observation):
 
-        write_tfrecords(dataset)
+                feature = {
+                    "observation": _bytestring_feature([observation]),
+                    "action_mask": _bytestring_feature([action_mask]),
+                    "action_probs": _bytestring_feature([action_probs]),
+                    "reward": _float_feature([reward]),
+                }
+                return tf.train.Example(features=tf.train.Features(feature=feature))
 
-        print("Done")
+            def write_tfrecords(ds):
+                filename = f"data/tfrecords/episode{i}.tfrec"
+
+                with tf.io.TFRecordWriter(filename) as out_file:
+                    for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
+                        serial_action_probs = tf.io.serialize_tensor(action_probs)
+                        serial_action_mask = tf.io.serialize_tensor(action_mask)
+                        serial_observation = tf.io.serialize_tensor(observation)
+                        example = to_tfrecord(reward.numpy().astype(np.float32),
+                                              serial_action_probs.numpy(),
+                                              serial_action_mask.numpy(),
+                                              serial_observation.numpy())
+                        out_file.write(example.SerializeToString())
+                    print("Wrote file {} containing {} records".format(filename, n))
+
+            write_tfrecords(dataset)
 
     # def update_model(self, data):
     #     self._model.set_weights(data['weights'])

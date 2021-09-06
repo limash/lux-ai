@@ -25,7 +25,7 @@ def one_call(input_data):  # , checkpoint):
     #                                n_points=config["n_points"], checkpointer=checkpointer)
     # init collector:
     # collector_agent = collector.Agent(config)
-    # collector_agent.collect_and_store()
+    # collector_agent.collect_and_store(2)
     # init scraper:
     # scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
     # scraper_agent.scrape_once()
