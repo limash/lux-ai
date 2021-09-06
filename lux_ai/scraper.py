@@ -34,6 +34,7 @@ class Agent(abc.ABC):
             num_collectors: a total amount of collectors
         """
         self._n_players = 2
+        self._team_of_interest = -1
         self._actions_number = len(action_vector)
         self._env_name = config["environment"]
 
@@ -61,12 +62,11 @@ class Agent(abc.ABC):
         action is a response for the current observation,
         reward, done are for the current observation.
         """
-        team_of_interest = -1
         if team_name:
             if data["info"]["TeamNames"][0] == team_name:
-                team_of_interest = 1
+                self._team_of_interest = 1
             elif data["info"]["TeamNames"][1] == team_name:
-                team_of_interest = 2
+                self._team_of_interest = 2
             else:
                 return
 
@@ -226,13 +226,13 @@ class Agent(abc.ABC):
             if any(dones):
                 break
 
-        count_team_1 = 0
-        for value in list(player1_data.values()):
-            count_team_1 += len(value.data)
-        count_team_2 = 0
-        for value in list(player2_data.values()):
-            count_team_2 += len(value.data)
-        print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
+        # count_team_1 = 0
+        # for value in list(player1_data.values()):
+        #     count_team_1 += len(value.data)
+        # count_team_2 = 0
+        # for value in list(player2_data.values()):
+        #     count_team_2 += len(value.data)
+        # print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
 
         reward1, reward2 = data["rewards"][0], data["rewards"][1]
         if reward1 > reward2:
@@ -246,19 +246,23 @@ class Agent(abc.ABC):
 
         progress = tf.linspace(0., 1., step + 2)[:-1]
         progress = tf.cast(progress, dtype=tf.float16)
+        return (player1_data, player2_data), (final_reward_1, final_reward_2), progress
 
+    def _send_data_to_dmreverb_buffer(self, players_data, rewards, progress):
+        player1_data, player2_data = players_data
+        final_reward_1, final_reward_2 = rewards
         arguments_1 = (player1_data, final_reward_1, progress,
                        self._feature_maps_shape, self._actions_number, self._n_points,
                        self._client, self._table_names)
         arguments_2 = (player2_data, final_reward_2, progress,
                        self._feature_maps_shape, self._actions_number, self._n_points,
                        self._client, self._table_names)
-        if team_of_interest == -1:
+        if self._team_of_interest == -1:
             send_data(*arguments_1)
             send_data(*arguments_2)
-        elif team_of_interest == 1:
+        elif self._team_of_interest == 1:
             send_data(*arguments_1)
-        elif team_of_interest == 2:
+        elif self._team_of_interest == 2:
             send_data(*arguments_2)
 
     def scrape_once(self):

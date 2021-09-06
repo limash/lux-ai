@@ -11,25 +11,25 @@ single_config = CONF_Single
 complex_config = CONF_Complex
 
 
-def one_call(input_data, checkpoint):
+def one_call(input_data):  # , checkpoint):
     config = {**main_config, **single_config}
-    if checkpoint is not None:
-        path = str(Path(checkpoint).parent)  # due to https://github.com/deepmind/reverb/issues/12
-        checkpointer = reverb.checkpointers.DefaultCheckpointer(path=path)
-    else:
-        checkpointer = None
+    # if checkpoint is not None:
+    #     path = str(Path(checkpoint).parent)  # due to https://github.com/deepmind/reverb/issues/12
+    #     checkpointer = reverb.checkpointers.DefaultCheckpointer(path=path)
+    # else:
+    #     checkpointer = None
 
-    feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
-    buffer = storage.UniformBuffer(feature_maps_shape,
-                                   num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
-                                   n_points=config["n_points"], checkpointer=checkpointer)
+    # feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
+    # buffer = storage.UniformBuffer(feature_maps_shape,
+    #                                num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
+    #                                n_points=config["n_points"], checkpointer=checkpointer)
     # init collector:
-    # collector_agent = collector.Agent(config, buffer.table_names, buffer.server_port)
-    # collector_agent.collect_once()
+    collector_agent = collector.Agent(config)
+    collector_agent.collect_and_store()
     # init scraper:
-    scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
+    # scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
     # scraper_agent.scrape_once()
-    scraper_agent.scrape_all()
+    # scraper_agent.scrape_all()
     # init trainer
     # trainer_agent = trainer.Agent(config, input_data, buffer.table_names, buffer.server_port)
     # trainer_agent.imitate()
@@ -54,9 +54,9 @@ if __name__ == '__main__':
     except FileNotFoundError:
         init_data = None
 
-    init_checkpoint = None  # "./data/dmreverb_store/looking_for_halite/checkpoint"
+    # init_checkpoint = None  # "./data/dmreverb_store/looking_for_halite/checkpoint"
 
     if main_config["setup"] == "single":
-        one_call(init_data, init_checkpoint)
+        one_call(init_data)  # , init_checkpoint)
     else:
         raise NotImplementedError
