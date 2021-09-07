@@ -25,11 +25,12 @@ class Agent(abc.ABC):
         actions_shape = self._actions_number = len(action_vector)
         self._model = models.get_actor_critic(feature_maps_shape, actions_shape)
 
-        class_weights = np.ones(actions_shape, dtype=np.single)
-        class_weights[3] = 0.01
-        class_weights[8] = 0.1
-        class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
-        self._class_weights = tf.expand_dims(class_weights, axis=0)
+        # class_weights = np.ones(actions_shape, dtype=np.single)
+        # class_weights[3] = 0.01
+        # class_weights[8] = 0.1
+        # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+        # self._class_weights = tf.expand_dims(class_weights, axis=0)
+        # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -106,7 +107,7 @@ class Agent(abc.ABC):
             filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
             filenames_ds = filenames_ds.with_options(option_no_order)
             ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
-            # ds = ds.shuffle(300)
+            ds = ds.shuffle(1000)
             return ds
 
         dataset = read_records()
@@ -115,11 +116,11 @@ class Agent(abc.ABC):
                                                        tf.cast(x2, dtype=tf.float32)),
                                                       (tf.cast(x3, dtype=tf.float32),
                                                        tf.cast(x4, dtype=tf.float32))
-                                         )
+                                                      )
                               )
         dataset = dataset.batch(self._batch_size, drop_remainder=True)
 
-        for sample in dataset.take(1):
+        for sample in dataset.take(10):
             observations = sample[0][0].numpy()
             actions_masks = sample[0][1].numpy()
             actions_probs = sample[1][0].numpy()
@@ -130,12 +131,10 @@ class Agent(abc.ABC):
             # skewed_loss = loss_function(sample[1][0], probs_output)
             # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
-        loss_function = tools.skewed_kldivergence_loss(self._class_weights)
-
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
             loss={
-                "probs_output": loss_function,  # tf.keras.losses.KLDivergence(),
+                "probs_output": tf.keras.losses.KLDivergence(),
                 "value_output": tf.keras.losses.MeanSquaredError()
             },
             metrics={
@@ -147,7 +146,8 @@ class Agent(abc.ABC):
                           "value_output": 0.1}
         )
 
-        self._model.fit(dataset, steps_per_epoch=100, epochs=10)
+        self._model.fit(dataset, epochs=10)
+        # self._model.fit(dataset, steps_per_epoch=100, epochs=10)
         weights = self._model.get_weights()
         data = {
             'weights': weights,

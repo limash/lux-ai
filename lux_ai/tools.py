@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras import backend
 import ray
@@ -39,10 +40,10 @@ def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
             assert k1 == k2 == k3
             point_value = [action, action_probs, actions_masks[i], observation]
             if k1 in player_data.keys():
-                player_data[k1].append(point_value, current_step)
+                player_data[k1].append(point_value, current_step, action)
             else:
-                player_data[k1] = DataValue()
-                player_data[k1].append(point_value, current_step)
+                player_data[k1] = DataValue(action.shape[0])
+                player_data[k1].append(point_value, current_step, action)
     return player_data
 
 
@@ -138,10 +139,12 @@ class GlobalVarActor:
 
 
 class DataValue:
-    def __init__(self):
+    def __init__(self, length):
         self.data = []
         self.step = []
+        self.actions = np.zeros(length)
 
-    def append(self, data, step):
+    def append(self, data, step, action):
         self.data.append(data)
         self.step.append(step)
+        self.actions += action

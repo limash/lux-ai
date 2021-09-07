@@ -7,7 +7,7 @@ import gym
 # import reverb
 # import ray
 
-from lux_ai import models, tools
+from lux_ai import tools  # models,
 import lux_gym.agents.agents as agents
 from lux_gym.envs.lux.action_vectors import action_vector
 
@@ -133,18 +133,44 @@ class Agent(abc.ABC):
             (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
 
             def data_gen():
+                """Generator, which softens very skewed distribution of actions
+                repeating rare and skipping very often actions"""
                 for j, player_data in enumerate((player1_data, player2_data)):
                     final_reward = final_reward_1 if j == 0 else final_reward_2
                     for unit in player_data.values():
-                        for step in unit.data:
-                            # point_value = [action, action_probs, actions_mask, observation]
-                            # store observation, action_mask, action_probs, reward
-                            yield step[3], step[2], step[1], final_reward
+                        median = np.median(unit.actions[np.nonzero(unit.actions)])
+                        actions = unit.actions
+                        multipliers = np.divide(median, actions, out=np.zeros_like(actions), where=actions != 0)
+                        final_idx = len(unit.data)
+                        counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
+                        if np.nonzero(unit.actions)[0].shape[0] == 1:
+                            # if only one possible action in unit episode trajectory, add only the last one (issue?)
+                            idx = final_idx - 1
+                        else:
+                            idx = 0
+                        while True:
+                            # point [action, action_probs, actions_mask, observation]
+                            point = unit.data[idx]
+                            action = point[0]
+                            multiplier = multipliers[np.nonzero(action)][0]
 
-            # data_gen = lambda: ((step[3], step[2], step[1], )
-            #                     for player_data in (player1_data, player2_data)
-            #                     for unit in player_data.values()
-            #                     for step in unit.data)
+                            if multiplier > 1.01 and random.random() > 1 / multiplier:
+                                # repeat point
+                                idx -= 1
+                            elif multiplier < 0.99 and random.random() > multiplier:
+                                # skip point
+                                idx += 1
+                                if idx == final_idx:
+                                    break
+                                continue
+
+                            # store observation, action_mask, action_probs, reward
+                            yield point[3], point[2], point[1], final_reward
+                            counters += action
+
+                            idx += 1
+                            if idx == final_idx:
+                                break
 
             dataset = tf.data.Dataset.from_generator(
                 data_gen,
@@ -153,7 +179,7 @@ class Agent(abc.ABC):
                     tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
                     tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
                     tf.TensorSpec(shape=(), dtype=tf.float16),
-                    ))
+                ))
 
             # foo = list(dataset.take(1))
             # Three data types can be stored in TFRecords: bytestrings, integers and floats
