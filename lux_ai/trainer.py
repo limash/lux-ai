@@ -118,18 +118,18 @@ class Agent(abc.ABC):
                                                        tf.cast(x4, dtype=tf.float32))
                                                       )
                               )
-        dataset = dataset.batch(self._batch_size, drop_remainder=True)
+        dataset = dataset.batch(self._batch_size)  # , drop_remainder=True)
 
-        for sample in dataset.take(10):
-            observations = sample[0][0].numpy()
-            actions_masks = sample[0][1].numpy()
-            actions_probs = sample[1][0].numpy()
-            total_rewards = sample[1][1].numpy()
-            probs_output, value_output = self._model((observations, actions_masks))
-            probs_output_v = probs_output.numpy()
-            value_output_v = value_output.numpy()
-            # skewed_loss = loss_function(sample[1][0], probs_output)
-            # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+        # for sample in dataset.take(10):
+        #     observations = sample[0][0].numpy()
+        #     actions_masks = sample[0][1].numpy()
+        #     actions_probs = sample[1][0].numpy()
+        #     total_rewards = sample[1][1].numpy()
+        #     probs_output, value_output = self._model((observations, actions_masks))
+        #     probs_output_v = probs_output.numpy()
+        #     value_output_v = value_output.numpy()
+        #     # skewed_loss = loss_function(sample[1][0], probs_output)
+        #     # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),

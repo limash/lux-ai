@@ -1,12 +1,5 @@
 # move all imports inside functions to use ray.remote multitasking
 
-def norm_probs(probs_unnorm):
-    import tensorflow as tf
-
-    logits = tf.math.log(probs_unnorm)
-    probs = tf.nn.softmax(logits)
-    return probs
-
 
 def get_actor_critic(features_shape, actions_shape):
     import tensorflow.keras as keras
@@ -38,12 +31,12 @@ def get_actor_critic(features_shape, actions_shape):
 
     x = layers.Flatten()(x)
 
-    all_probs = layers.Dense(actions_shape, activation="softmax", kernel_initializer=initializer_random,
-                             name="probs_output")(x)
-    # spec_probs_unnorm = layers.Multiply()([all_probs, input_B])
-    # probs = layers.Lambda(norm_probs, name="probs_output")(spec_probs_unnorm)
-    probs = all_probs
+    city_tiles_probs = layers.Dense(4, activation="softmax", kernel_initializer=initializer_random)(x)
+    workers_probs = layers.Dense(19, activation="softmax", kernel_initializer=initializer_random)(x)
+    carts_probs = layers.Dense(17, activation="softmax", kernel_initializer=initializer_random)(x)
 
+    all_probs = layers.Concatenate()([city_tiles_probs, workers_probs, carts_probs])
+    probs = layers.Multiply(name="probs_output")([all_probs, input_B])
     baseline = layers.Dense(1, activation="tanh", name="value_output", kernel_initializer=initializer_random)(x)
 
     model = keras.Model(inputs=[input_A, input_B], outputs=[probs, baseline])

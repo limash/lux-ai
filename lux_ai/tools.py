@@ -112,6 +112,15 @@ def get_entropy(logits, mask=None):
     return entropy
 
 
+def norm_probs(probs_unnorm):
+    # spec_probs_unnorm = layers.Multiply()([all_probs, input_B])
+    # probs = layers.Lambda(norm_probs, name="probs_output")(spec_probs_unnorm)
+
+    logits = tf.math.log(probs_unnorm)
+    probs = tf.nn.softmax(logits)
+    return probs
+
+
 @ray.remote
 class GlobalVarActor:
     def __init__(self):
