@@ -1,12 +1,12 @@
 import abc
 import pickle
 
-import numpy as np
+# import numpy as np
 import tensorflow as tf
 # import reverb
 
 from lux_ai import models, tools
-from lux_gym.envs.lux.action_vectors import action_vector
+from lux_gym.envs.lux.action_vectors import action_vector, worker_action_mask
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -21,9 +21,14 @@ class Agent(abc.ABC):
         # self._entropy_c_decay = config["entropy_c_decay"]
         # self._lambda = config["lambda"]
 
-        feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
-        actions_shape = self._actions_number = len(action_vector)
-        self._model = models.get_actor_critic(feature_maps_shape, actions_shape)
+        self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
+        self._actions_shape = self._actions_number = len(action_vector)
+        self._model = models.get_actor_critic()
+        # launch a model once to define structure
+        dummy_input = (tf.ones(self._feature_maps_shape, dtype=tf.float32),
+                       tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
+        dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
+        self._model(dummy_input)
 
         # class_weights = np.ones(actions_shape, dtype=np.single)
         # class_weights[3] = 0.01
@@ -89,9 +94,13 @@ class Agent(abc.ABC):
             example = tf.io.parse_single_example(example, features)
 
             observation = tf.io.parse_tensor(example["observation"], tf.float16)
+            observation.set_shape(self._feature_maps_shape)
             action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
+            action_mask.set_shape(self._actions_shape)
             action_probs = tf.io.parse_tensor(example["action_probs"], tf.float16)
+            action_probs.set_shape(self._actions_shape)
             reward = example["reward"]
+            reward.set_shape(())
 
             return observation, action_mask, action_probs, reward
 
@@ -134,16 +143,16 @@ class Agent(abc.ABC):
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
             loss={
-                "probs_output": tf.keras.losses.KLDivergence(),
-                "value_output": tf.keras.losses.MeanSquaredError()
+                "output_1": tf.keras.losses.KLDivergence(),
+                "output_2": tf.keras.losses.MeanSquaredError()
             },
             metrics={
-                "probs_output": [tf.keras.metrics.CategoricalAccuracy()],
+                "output_1": [tf.keras.metrics.CategoricalAccuracy()],
                 # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
                 #                  tf.keras.metrics.MeanAbsoluteError()]
             },
-            loss_weights={"probs_output": 2.0,
-                          "value_output": 0.1}
+            loss_weights={"output_1": 2.0,
+                          "output_2": 0.1}
         )
 
         self._model.fit(dataset, epochs=10)
