@@ -73,3 +73,4 @@ Here z and x are (batch size, 32, 32, 64).
 After flattening z is a dense vector of size 64.
 Replacing it with downsampling with convolutions with strides, or something like 
 `z = layers.Conv2D(filters=64, kernel_size=32)(z)` drops the productivity twice.
+Also batch normalization is essential.

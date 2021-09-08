@@ -3,7 +3,7 @@ CONF_ActorCritic = {
     "setup": "single",
     "lambda": 0.8,
     "saved_policies": ["ilia_rb"],
-    "model_name": "actor_critic_2"
+    "model_name": "actor_critic_1"
 }
 
 CONF_Single = {

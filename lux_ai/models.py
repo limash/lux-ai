@@ -5,24 +5,17 @@ def actor_critic_1():
     import tensorflow as tf
     import tensorflow.keras as keras
 
-    def circular_padding(x):
-        x = tf.concat([x[:, -1:, :, :], x, x[:, :1, :, :]], 1)
-        x = tf.concat([x[:, :, -1:, :], x, x[:, :, :1, :]], 2)
-        return x
-
     class ResidualUnit(keras.layers.Layer):
         def __init__(self, filters, initializer, activation, **kwargs):
             super().__init__(**kwargs)
 
             self._filters = filters
             self._activation = activation
-            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer, use_bias=False)
+            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer, padding="same", use_bias=False)
             self._norm = keras.layers.BatchNormalization()
 
         def call(self, inputs, training=False, **kwargs):
-            x = inputs
-            x = circular_padding(x)
-            x = self._conv(x)
+            x = self._conv(inputs)
             x = self._norm(x, training=training)
             return self._activation(inputs + x)
 
@@ -34,36 +27,33 @@ def actor_critic_1():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
 
-            filters = 64
+            filters = 128
             layers = 12
 
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
             initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
             activation = keras.activations.relu
 
-            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer)
+            self._conv = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer, use_bias=False)
             self._norm = keras.layers.BatchNormalization()
             self._activation = keras.layers.ReLU()
             self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
 
-            self._city_tiles_probs0 = keras.layers.Dense(64, activation=activation, kernel_initializer=initializer)
+            self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._city_tiles_probs1 = keras.layers.Dense(4, activation="softmax", kernel_initializer=initializer_random)
-            self._workers_probs0 = keras.layers.Dense(64, activation=activation, kernel_initializer=initializer)
+            self._workers_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._workers_probs1 = keras.layers.Dense(19, activation="softmax", kernel_initializer=initializer_random)
-            self._carts_probs0 = keras.layers.Dense(64, activation=activation, kernel_initializer=initializer)
+            self._carts_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._carts_probs1 = keras.layers.Dense(17, activation="softmax", kernel_initializer=initializer_random)
 
-            self._probs = keras.layers.Multiply(name="output_1")
             self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
-                                                activation=keras.activations.tanh,
-                                                name="output_2")
+                                                activation=keras.activations.tanh)
 
         def call(self, inputs, training=False, mask=None):
             features, actions_mask = inputs
 
             x = features
 
-            x = circular_padding(x)
             x = self._conv(x)
             x = self._norm(x, training=training)
             x = self._activation(x)
@@ -87,7 +77,7 @@ def actor_critic_1():
             c = self._carts_probs0(z)
             c = self._carts_probs1(c)
             probs = tf.concat([t, w, c], axis=1)
-            probs = self._probs([probs, actions_mask])
+            probs = probs * actions_mask
 
             baseline = self._baseline(tf.concat([y, z], axis=1))
 
