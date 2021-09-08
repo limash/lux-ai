@@ -23,12 +23,17 @@ class Agent(abc.ABC):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = self._actions_number = len(action_vector)
-        self._model = models.get_actor_critic()
-        # launch a model once to define structure
-        dummy_input = (tf.ones(self._feature_maps_shape, dtype=tf.float32),
-                       tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
-        dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
-        self._model(dummy_input)
+        if config["model_name"] == "actor_critic_1":
+            self._model = models.actor_critic_1()
+            # launch a model once to define structure
+            dummy_input = (tf.ones(self._feature_maps_shape, dtype=tf.float32),
+                           tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
+            dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
+            self._model(dummy_input)
+        elif config["model_name"] == "actor_critic_2":
+            self._model = models.actor_critic_2(self._feature_maps_shape, self._actions_shape)
+        else:
+            raise ValueError
 
         # class_weights = np.ones(actions_shape, dtype=np.single)
         # class_weights[3] = 0.01

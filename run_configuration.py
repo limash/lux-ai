@@ -2,7 +2,8 @@ CONF_ActorCritic = {
     "environment": "lux_gym:lux-v0",
     "setup": "single",
     "lambda": 0.8,
-    "saved_policies": ["ilia_rb"]
+    "saved_policies": ["ilia_rb"],
+    "model_name": "actor_critic_2"
 }
 
 CONF_Single = {
