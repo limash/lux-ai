@@ -50,10 +50,17 @@ def write_tfrecord(ds, record_number):
 
 def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
                         feature_maps_shape, actions_number, record_number):
+
+    if player1_data == player2_data is None:
+        print("No data to record")
+        return
+
     def data_gen():
         """Generator, which softens very skewed distribution of actions
         repeating rare and skipping very often actions"""
         for j, player_data in enumerate((player1_data, player2_data)):
+            if player_data is None:
+                continue
             final_reward = final_reward_1 if j == 0 else final_reward_2
             for unit in player_data.values():
                 median = np.median(unit.actions[np.nonzero(unit.actions)])

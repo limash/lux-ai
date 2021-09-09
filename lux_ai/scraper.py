@@ -2,15 +2,15 @@ import abc
 import glob
 import json
 import random
+# import os
 
 import tensorflow as tf
 import gym
-import reverb
+# import reverb
 
-from lux_ai import tools
-from lux_ai.dm_reverb_storage import send_data
+from lux_ai import tools, tfrecords_storage
+# from lux_ai.dm_reverb_storage import send_data
 from lux_gym.envs.lux.action_vectors import action_vector
-
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -19,22 +19,21 @@ if len(physical_devices) > 0:
 
 class Agent(abc.ABC):
 
-    def __init__(self, config,
-                 buffer_table_names, buffer_server_port,
-                 ray_queue=None, collector_id=None, workers_info=None, num_collectors=None
-                 ):
+    def __init__(self, config):  # ,
+        # buffer_table_names, buffer_server_port,
+        # ray_queue=None, collector_id=None, workers_info=None, num_collectors=None
+        # ):
         """
         Args:
             config: A configuration dictionary
-            buffer_table_names: dm reverb server table names
-            buffer_server_port: a port where a dm reverb server was initialized
-            ray_queue: a ray interprocess queue to store neural net weights
-            collector_id: to identify a current collector if there are several ones
-            workers_info: a ray interprocess (remote) object to store shared information
-            num_collectors: a total amount of collectors
+            # buffer_table_names: dm reverb server table names
+            # buffer_server_port: a port where a dm reverb server was initialized
+            # ray_queue: a ray interprocess queue to store neural net weights
+            # collector_id: to identify a current collector if there are several ones
+            # workers_info: a ray interprocess (remote) object to store shared information
+            # num_collectors: a total amount of collectors
         """
         self._n_players = 2
-        self._team_of_interest = -1
         self._actions_number = len(action_vector)
         self._env_name = config["environment"]
 
@@ -42,13 +41,13 @@ class Agent(abc.ABC):
 
         self._n_points = config["n_points"]
 
-        self._table_names = buffer_table_names
-        self._client = reverb.Client(f'localhost:{buffer_server_port}')
+        # self._table_names = buffer_table_names
+        # self._client = reverb.Client(f'localhost:{buffer_server_port}')
 
-        self._ray_queue = ray_queue
-        self._collector_id = collector_id
-        self._workers_info = workers_info
-        self._num_collectors = num_collectors
+        # self._ray_queue = ray_queue
+        # self._collector_id = collector_id
+        # self._workers_info = workers_info
+        # self._num_collectors = num_collectors
 
         self._files = glob.glob("./data/saved_episodes/*.json")
 
@@ -64,11 +63,13 @@ class Agent(abc.ABC):
         """
         if team_name:
             if data["info"]["TeamNames"][0] == team_name:
-                self._team_of_interest = 1
+                team_of_interest = 1
             elif data["info"]["TeamNames"][1] == team_name:
-                self._team_of_interest = 2
+                team_of_interest = 2
             else:
-                return
+                return (None, None), (None, None), None
+        else:
+            team_of_interest = -1
 
         player1_data = {}
         player2_data = {}
@@ -126,11 +127,14 @@ class Agent(abc.ABC):
                     resourceType = action_list[3]
                     try:
                         unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
-                    except KeyError:  # it occurs when there is not valid action proposed
+                    except KeyError:  # these is no such active unit to take action
                         continue
-                    direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
-                                                                                         dest_name].pos)
-                    action_vector_name = f"{unit_type}_t{direction}{resourceType}"
+                    try:
+                        direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
+                                                                                             dest_name].pos)
+                        action_vector_name = f"{unit_type}_t{direction}{resourceType}"
+                    except KeyError:  # there is no such destination unit
+                        action_vector_name = f"{unit_type}_mc"
                     if unit_type == "w":
                         actions_dict["workers"][unit_name] = action_vector[action_vector_name]
                     else:
@@ -246,24 +250,34 @@ class Agent(abc.ABC):
 
         progress = tf.linspace(0., 1., step + 2)[:-1]
         progress = tf.cast(progress, dtype=tf.float16)
-        return (player1_data, player2_data), (final_reward_1, final_reward_2), progress
 
-    def _send_data_to_dmreverb_buffer(self, players_data, rewards, progress):
-        player1_data, player2_data = players_data
-        final_reward_1, final_reward_2 = rewards
-        arguments_1 = (player1_data, final_reward_1, progress,
-                       self._feature_maps_shape, self._actions_number, self._n_points,
-                       self._client, self._table_names)
-        arguments_2 = (player2_data, final_reward_2, progress,
-                       self._feature_maps_shape, self._actions_number, self._n_points,
-                       self._client, self._table_names)
-        if self._team_of_interest == -1:
-            send_data(*arguments_1)
-            send_data(*arguments_2)
-        elif self._team_of_interest == 1:
-            send_data(*arguments_1)
-        elif self._team_of_interest == 2:
-            send_data(*arguments_2)
+        if team_of_interest == -1:
+            output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+        elif team_of_interest == 1:
+            output = (player1_data, None), (final_reward_1, None), progress
+        elif team_of_interest == 2:
+            output = (None, player2_data), (None, final_reward_2), progress
+        else:
+            raise ValueError
+
+        return output
+
+    # def _send_data_to_dmreverb_buffer(self, players_data, rewards, progress):
+    #     player1_data, player2_data = players_data
+    #     final_reward_1, final_reward_2 = rewards
+    #     arguments_1 = (player1_data, final_reward_1, progress,
+    #                    self._feature_maps_shape, self._actions_number, self._n_points,
+    #                    self._client, self._table_names)
+    #     arguments_2 = (player2_data, final_reward_2, progress,
+    #                    self._feature_maps_shape, self._actions_number, self._n_points,
+    #                    self._client, self._table_names)
+    #     if self._team_of_interest == -1:
+    #         send_data(*arguments_1)
+    #         send_data(*arguments_2)
+    #     elif self._team_of_interest == 1:
+    #         send_data(*arguments_1)
+    #     elif self._team_of_interest == 2:
+    #         send_data(*arguments_2)
 
     def scrape_once(self):
         file_name = random.sample(self._files, 1)[0]
@@ -271,14 +285,15 @@ class Agent(abc.ABC):
             data = json.load(read_file)
         self._scrape(data)
 
-    def scrape_all(self):
-        for file_name in self._files:
+    def scrape_all(self, team_name=None):
+        for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
-                print(f"File is {file_name}")
+                print(f"File is {file_name}; {i}")
                 data = json.load(read_file)
-            self._scrape(data, team_name="Looking for Halite")
-        try:
-            checkpoint = self._client.checkpoint()
-        except RuntimeError as err:
-            print(err)
-            checkpoint = err
+
+            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data,
+                                                                                                    team_name=team_name)
+            tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
+                                                  self._feature_maps_shape, self._actions_number, i)
+
+            player1_data, player2_data, final_reward_1, final_reward_2, progress = None, None, None, None, None
