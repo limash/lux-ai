@@ -3,7 +3,7 @@ import pickle
 
 # import reverb
 
-from lux_ai import storage, collector, scraper, trainer, tools
+from lux_ai import dm_reverb_storage, collector, scraper, trainer, tools
 from run_configuration import *
 
 main_config = CONF_ActorCritic
@@ -25,7 +25,7 @@ def one_call(input_data):  # , checkpoint):
     #                                n_points=config["n_points"], checkpointer=checkpointer)
     # init collector:
     # collector_agent = collector.Agent(config)
-    # collector_agent.collect_and_store(100)
+    # collector_agent.collect_and_store(2)
     # init scraper:
     # scraper_agent = scraper.Agent(config, buffer.table_names, buffer.server_port)
     # scraper_agent.scrape_once()

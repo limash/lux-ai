@@ -8,7 +8,7 @@ import gym
 import reverb
 
 from lux_ai import tools
-from lux_ai.storage import send_data
+from lux_ai.dm_reverb_storage import send_data
 from lux_gym.envs.lux.action_vectors import action_vector
 
 

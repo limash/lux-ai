@@ -1,13 +1,13 @@
 import abc
 import random
 
-import numpy as np
+# import numpy as np
 import tensorflow as tf
 import gym
 # import reverb
 # import ray
 
-from lux_ai import tools  # models,
+from lux_ai import tools, tfrecords_storage
 import lux_gym.agents.agents as agents
 from lux_gym.envs.lux.action_vectors import action_vector
 
@@ -131,94 +131,10 @@ class Agent(abc.ABC):
     def collect_and_store(self, number_of_collects):
         for i in range(number_of_collects):
             (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
+            tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
+                                                  self._feature_maps_shape, self._actions_number, i)
 
-            def data_gen():
-                """Generator, which softens very skewed distribution of actions
-                repeating rare and skipping very often actions"""
-                for j, player_data in enumerate((player1_data, player2_data)):
-                    final_reward = final_reward_1 if j == 0 else final_reward_2
-                    for unit in player_data.values():
-                        median = np.median(unit.actions[np.nonzero(unit.actions)])
-                        actions = unit.actions
-                        multipliers = np.divide(median, actions, out=np.zeros_like(actions), where=actions != 0)
-                        final_idx = len(unit.data)
-                        counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
-                        if np.nonzero(unit.actions)[0].shape[0] == 1:
-                            # if only one possible action in unit episode trajectory, add only the last one (issue?)
-                            idx = final_idx - 1
-                        else:
-                            idx = 0
-                        while True:
-                            # point [action, action_probs, actions_mask, observation]
-                            point = unit.data[idx]
-                            action = point[0]
-                            multiplier = multipliers[np.nonzero(action)][0]
-
-                            if multiplier > 1.01 and random.random() > 1 / multiplier:
-                                # repeat point
-                                idx -= 1
-                            elif multiplier < 0.99 and random.random() > multiplier:
-                                # skip point
-                                idx += 1
-                                if idx == final_idx:
-                                    break
-                                continue
-
-                            # store observation, action_mask, action_probs, reward
-                            yield point[3], point[2], point[1], final_reward
-                            counters += action
-
-                            idx += 1
-                            if idx == final_idx:
-                                break
-
-            dataset = tf.data.Dataset.from_generator(
-                data_gen,
-                output_signature=(
-                    tf.TensorSpec(shape=self._feature_maps_shape, dtype=tf.float16),
-                    tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
-                    tf.TensorSpec(shape=self._actions_number, dtype=tf.float16),
-                    tf.TensorSpec(shape=(), dtype=tf.float16),
-                ))
-
-            # foo = list(dataset.take(1))
-            # Three data types can be stored in TFRecords: bytestrings, integers and floats
-            # They are always stored as lists, a single data element is a list of size 1
-
-            def _bytestring_feature(list_of_bytestrings):
-                return tf.train.Feature(bytes_list=tf.train.BytesList(value=list_of_bytestrings))
-
-            def _float_feature(list_of_floats):
-                return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
-
-            def to_tfrecord(reward, action_probs, action_mask, observation):
-
-                feature = {
-                    "observation": _bytestring_feature([observation]),
-                    "action_mask": _bytestring_feature([action_mask]),
-                    "action_probs": _bytestring_feature([action_probs]),
-                    "reward": _float_feature([reward]),
-                }
-                return tf.train.Example(features=tf.train.Features(feature=feature))
-
-            def write_tfrecords(ds):
-                filename = f"data/tfrecords/episode{i}.tfrec"
-
-                with tf.io.TFRecordWriter(filename) as out_file:
-                    for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
-                        serial_action_probs = tf.io.serialize_tensor(action_probs)
-                        serial_action_mask = tf.io.serialize_tensor(action_mask)
-                        serial_observation = tf.io.serialize_tensor(observation)
-                        example = to_tfrecord(reward.numpy().astype(np.float32),
-                                              serial_action_probs.numpy(),
-                                              serial_action_mask.numpy(),
-                                              serial_observation.numpy())
-                        out_file.write(example.SerializeToString())
-                    print("Wrote file {} containing {} records".format(filename, n))
-
-            write_tfrecords(dataset)
-
-    # def update_model(self, data):
+# def update_model(self, data):
     #     self._model.set_weights(data['weights'])
 
     # def add_model_to_pool(self, data):

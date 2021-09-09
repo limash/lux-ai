@@ -5,7 +5,7 @@ import pickle
 import tensorflow as tf
 # import reverb
 
-from lux_ai import models, tools
+from lux_ai import models, tools, tfrecords_storage
 from lux_gym.envs.lux.action_vectors import action_vector, worker_action_mask
 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -86,45 +86,7 @@ class Agent(abc.ABC):
         # batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         # dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
-        AUTO = tf.data.experimental.AUTOTUNE
-
-        def read_tfrecord(example):
-            features = {
-                "observation": tf.io.FixedLenFeature([], tf.string),
-                "action_mask": tf.io.FixedLenFeature([], tf.string),
-                "action_probs": tf.io.FixedLenFeature([], tf.string),
-                "reward": tf.io.FixedLenFeature([], tf.float32),
-            }
-            # decode the TFRecord
-            example = tf.io.parse_single_example(example, features)
-
-            observation = tf.io.parse_tensor(example["observation"], tf.float16)
-            observation.set_shape(self._feature_maps_shape)
-            action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
-            action_mask.set_shape(self._actions_shape)
-            action_probs = tf.io.parse_tensor(example["action_probs"], tf.float16)
-            action_probs.set_shape(self._actions_shape)
-            reward = example["reward"]
-            reward.set_shape(())
-
-            return observation, action_mask, action_probs, reward
-
-        def read_records():
-            # read from TFRecords. For optimal performance, read from multiple
-            # TFRecord files at once and set the option experimental_deterministic = False
-            # to allow order-altering optimizations.
-
-            option_no_order = tf.data.Options()
-            option_no_order.experimental_deterministic = False
-
-            filenames = tf.io.gfile.glob("data/tfrecords/" + "*.tfrec")
-            filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-            filenames_ds = filenames_ds.with_options(option_no_order)
-            ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
-            ds = ds.shuffle(1000)
-            return ds
-
-        dataset = read_records()
+        dataset = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape)
         # dataset = dataset.map(lambda x1, x2, x3, x4: ((x1, x2), (x3, x4)))
         dataset = dataset.map(lambda x1, x2, x3, x4: ((tf.cast(x1, dtype=tf.float32),
                                                        tf.cast(x2, dtype=tf.float32)),
