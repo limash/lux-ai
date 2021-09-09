@@ -2,7 +2,7 @@ import abc
 import glob
 import json
 import random
-# import os
+import pathlib
 
 import tensorflow as tf
 import gym
@@ -50,6 +50,7 @@ class Agent(abc.ABC):
         # self._num_collectors = num_collectors
 
         self._files = glob.glob("./data/saved_episodes/*.json")
+        self._already_saved_files = glob.glob("./data/tfrecords/imitator/*.tfrec")
 
     def _scrape(self, data, team_name=None):
         """
@@ -285,15 +286,24 @@ class Agent(abc.ABC):
             data = json.load(read_file)
         self._scrape(data)
 
-    def scrape_all(self, team_name=None):
+    def scrape_all(self, team_name=None, files_to_save=5):
+        j = 0
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
+                raw_name = pathlib.Path(file_name).stem
+                if f"./data/tfrecords/imitator/{raw_name}.tfrec" in self._already_saved_files:
+                    print(f"File {file_name} is already saved")
+                    continue
                 print(f"File is {file_name}; {i}")
                 data = json.load(read_file)
 
-            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data,
-                                                                                                    team_name=team_name)
-            tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
-                                                  self._feature_maps_shape, self._actions_number, i)
+            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data, team_name)
+            if player1_data == player2_data is None:
+                continue
 
-            player1_data, player2_data, final_reward_1, final_reward_2, progress = None, None, None, None, None
+            tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
+                                                  self._feature_maps_shape, self._actions_number, i, raw_name)
+            j += 1
+            if j == files_to_save:
+                print(f"{files_to_save} files saved, exit")
+                return

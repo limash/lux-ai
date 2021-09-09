@@ -27,12 +27,12 @@ def one_call(input_data):  # , checkpoint):
     # collector_agent = collector.Agent(config)
     # collector_agent.collect_and_store(2)
     # init scraper:
-    scraper_agent = scraper.Agent(config)
+    # scraper_agent = scraper.Agent(config)
     # scraper_agent.scrape_once()
-    scraper_agent.scrape_all()  # "Looking for Halite")
+    # scraper_agent.scrape_all("Looking for Halite")
     # init trainer
-    # trainer_agent = trainer.Agent(config, input_data)
-    # trainer_agent.imitate()
+    trainer_agent = trainer.Agent(config, input_data)
+    trainer_agent.imitate()
     # init single_agent, which collects and trains
 
     # data = {

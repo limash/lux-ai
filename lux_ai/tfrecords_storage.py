@@ -32,8 +32,8 @@ def to_tfrecord(reward, action_probs, action_mask, observation):
     return tf.train.Example(features=tf.train.Features(feature=feature))
 
 
-def write_tfrecord(ds, record_number):
-    filename = f"data/tfrecords/imitator/episode{record_number}.tfrec"
+def write_tfrecord(ds, record_number, record_name):
+    filename = f"data/tfrecords/imitator/{record_name}.tfrec"
 
     with tf.io.TFRecordWriter(filename) as out_file:
         for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
@@ -45,15 +45,11 @@ def write_tfrecord(ds, record_number):
                                   serial_action_mask.numpy(),
                                   serial_observation.numpy())
             out_file.write(example.SerializeToString())
-        print("Wrote file {} containing {} records".format(filename, n))
+        print(f"Wrote file #{record_number} {record_name}.tfrec containing {n} records")
 
 
 def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
-                        feature_maps_shape, actions_number, record_number):
-
-    if player1_data == player2_data is None:
-        print("No data to record")
-        return
+                        feature_maps_shape, actions_number, record_number, record_name):
 
     def data_gen():
         """Generator, which softens very skewed distribution of actions
@@ -107,7 +103,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
         ))
 
     # foo = list(dataset.take(1))
-    write_tfrecord(dataset, record_number)
+    write_tfrecord(dataset, record_number, record_name)
 
 
 def read_records_for_imitator(feature_maps_shape, actions_shape):
