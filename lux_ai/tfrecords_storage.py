@@ -58,7 +58,10 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
             if player_data is None:
                 continue
             final_reward = final_reward_1 if j == 0 else final_reward_2
-            for unit in player_data.values():
+            for key, unit in player_data.items():
+                # unit_type = key.split("_")[0]
+                # if unit_type != "u":
+                #     continue
                 median = np.median(unit.actions[np.nonzero(unit.actions)])
                 actions = unit.actions
                 multipliers = np.divide(median, actions, out=np.zeros_like(actions), where=actions != 0)
@@ -92,6 +95,12 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                     idx += 1
                     if idx == final_idx:
                         break
+
+    # result = []
+    # generator = data_gen()
+    # while len(result) < 10:
+    #     x = next(generator)
+    #     result.append(x)
 
     dataset = tf.data.Dataset.from_generator(
         data_gen,

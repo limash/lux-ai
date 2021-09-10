@@ -295,22 +295,24 @@ class Agent(abc.ABC):
             with open(file_name, "r") as read_file:
                 raw_name = pathlib.Path(file_name).stem
                 if f"./data/tfrecords/imitator/{raw_name}.tfrec" in self._already_saved_files:
-                    print(f"File {file_name} is already saved")
+                    print(f"File {file_name}; {i}; is already saved.")
                     continue
-                print(f"File is {file_name}; {i}")
                 data = json.load(read_file)
                 if data["version"] != self._lux_version:
-                    print(f"File {file_name} has inappropriate lux version")
+                    print(f"File {file_name}; {i}; is for an inappropriate lux version.")
                     continue
 
             (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data,
                                                                                                     self._team_name)
             if player1_data == player2_data is None:
+                print(f"File {file_name}; {i}; does not have a required team.")
                 continue
+            else:
+                print(f"File {file_name}; {i}; recording.")
 
             tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
                                                   self._feature_maps_shape, self._actions_number, i, raw_name)
             j += 1
             if j == files_to_save:
-                print(f"{files_to_save} files saved, exit")
+                print(f"{files_to_save} files saved, exit.")
                 return
