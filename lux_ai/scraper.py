@@ -39,7 +39,7 @@ class Agent(abc.ABC):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
 
-        self._n_points = config["n_points"]
+        # self._n_points = config["n_points"]
 
         # self._table_names = buffer_table_names
         # self._client = reverb.Client(f'localhost:{buffer_server_port}')
@@ -49,7 +49,10 @@ class Agent(abc.ABC):
         # self._workers_info = workers_info
         # self._num_collectors = num_collectors
 
-        self._files = glob.glob("./data/saved_episodes/*.json")
+        self._lux_version = config["lux_version"]
+        self._team_name = config["team_name"]
+
+        self._files = glob.glob("./data/jsons/*.json")
         self._already_saved_files = glob.glob("./data/tfrecords/imitator/*.tfrec")
 
     def _scrape(self, data, team_name=None):
@@ -286,7 +289,7 @@ class Agent(abc.ABC):
             data = json.load(read_file)
         self._scrape(data)
 
-    def scrape_all(self, team_name=None, files_to_save=5):
+    def scrape_all(self, files_to_save=5):
         j = 0
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
@@ -296,8 +299,12 @@ class Agent(abc.ABC):
                     continue
                 print(f"File is {file_name}; {i}")
                 data = json.load(read_file)
+                if data["version"] != self._lux_version:
+                    print(f"File {file_name} has inappropriate lux version")
+                    continue
 
-            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data, team_name)
+            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data,
+                                                                                                    self._team_name)
             if player1_data == player2_data is None:
                 continue
 

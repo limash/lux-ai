@@ -1,7 +1,7 @@
 # move all imports inside functions to use ray.remote multitasking
 
 
-def actor_critic_1():
+def actor_critic_custom():
     import tensorflow as tf
     import tensorflow.keras as keras
 
@@ -90,7 +90,7 @@ def actor_critic_1():
     return model
 
 
-def actor_critic_2(features_shape, actions_shape):
+def actor_critic_functional(features_shape, actions_shape):
     # import tensorflow as tf
     import tensorflow.keras as keras
     import tensorflow.keras.layers as layers

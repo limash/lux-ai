@@ -4,15 +4,16 @@ import pickle
 # import reverb
 
 from lux_ai import dm_reverb_storage, collector, scraper, trainer, tools
-from run_configuration import *
+from run_configuration import CONF_Scraper, CONF_Single, CONF_ActorCritic
 
 main_config = CONF_ActorCritic
 single_config = CONF_Single
-complex_config = CONF_Complex
+scraper_config = CONF_Scraper
+# complex_config = CONF_Complex
 
 
 def one_call(input_data):  # , checkpoint):
-    config = {**main_config, **single_config}
+    config = {**main_config, **single_config, **scraper_config}
     # if checkpoint is not None:
     #     path = str(Path(checkpoint).parent)  # due to https://github.com/deepmind/reverb/issues/12
     #     checkpointer = reverb.checkpointers.DefaultCheckpointer(path=path)
@@ -27,12 +28,12 @@ def one_call(input_data):  # , checkpoint):
     # collector_agent = collector.Agent(config)
     # collector_agent.collect_and_store(2)
     # init scraper:
-    # scraper_agent = scraper.Agent(config)
+    scraper_agent = scraper.Agent(config)
     # scraper_agent.scrape_once()
-    # scraper_agent.scrape_all("Looking for Halite")
+    scraper_agent.scrape_all()
     # init trainer
-    trainer_agent = trainer.Agent(config, input_data)
-    trainer_agent.imitate()
+    # trainer_agent = trainer.Agent(config, input_data)
+    # trainer_agent.imitate()
     # init single_agent, which collects and trains
 
     # data = {

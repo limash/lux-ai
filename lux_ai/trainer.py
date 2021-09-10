@@ -23,15 +23,15 @@ class Agent(abc.ABC):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = self._actions_number = len(action_vector)
-        if config["model_name"] == "actor_critic_1":
-            self._model = models.actor_critic_1()
+        if config["model_name"] == "actor_critic_custom":
+            self._model = models.actor_critic_custom()
             # launch a model once to define structure
             dummy_input = (tf.ones(self._feature_maps_shape, dtype=tf.float32),
                            tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
             dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
             self._model(dummy_input)
-        elif config["model_name"] == "actor_critic_2":
-            self._model = models.actor_critic_2(self._feature_maps_shape, self._actions_shape)
+        elif config["model_name"] == "actor_critic_functional":
+            self._model = models.actor_critic_functional(self._feature_maps_shape, self._actions_shape)
         else:
             raise ValueError
 
@@ -46,7 +46,7 @@ class Agent(abc.ABC):
             self._model.set_weights(data['weights'])
             print("Continue the model training.")
 
-        self._is_debug = config["debug"]
+        # self._is_debug = config["debug"]
         # if not config["debug"]:
         #     self._training_step_full = tf.function(self._training_step_full)
         # self._dataset = reverb.TrajectoryDataset.from_table_signature(
@@ -96,14 +96,14 @@ class Agent(abc.ABC):
                               )
         dataset = dataset.batch(self._batch_size)  # , drop_remainder=True)
 
-        # for sample in dataset.take(10):
-        #     observations = sample[0][0].numpy()
-        #     actions_masks = sample[0][1].numpy()
-        #     actions_probs = sample[1][0].numpy()
-        #     total_rewards = sample[1][1].numpy()
-        #     probs_output, value_output = self._model((observations, actions_masks))
-        #     probs_output_v = probs_output.numpy()
-        #     value_output_v = value_output.numpy()
+        for sample in dataset.take(10):
+            observations = sample[0][0].numpy()
+            actions_masks = sample[0][1].numpy()
+            actions_probs = sample[1][0].numpy()
+            total_rewards = sample[1][1].numpy()
+            probs_output, value_output = self._model((observations, actions_masks))
+            probs_output_v = probs_output.numpy()
+            value_output_v = value_output.numpy()
         #     # skewed_loss = loss_function(sample[1][0], probs_output)
         #     # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
