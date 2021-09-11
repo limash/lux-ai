@@ -153,7 +153,6 @@ def actor_critic_with_skip_connections():
             super().__init__(**kwargs)
 
             filters = 128
-            layers = 12
 
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
             initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
@@ -162,7 +161,24 @@ def actor_critic_with_skip_connections():
             self._conv = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer, use_bias=False)
             self._norm = keras.layers.BatchNormalization()
             self._activation = keras.layers.ReLU()
-            self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
+
+            self._residual_block1 = [ResidualUnit(filters, initializer, activation) for _ in range(3)]
+            self._conv1 = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer,
+                                              use_bias=False)
+            self._norm1 = keras.layers.BatchNormalization()
+            self._activation1 = keras.layers.ReLU()
+
+            self._residual_block2 = [ResidualUnit(filters, initializer, activation) for _ in range(3)]
+            self._conv2 = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer,
+                                              use_bias=False)
+            self._norm2 = keras.layers.BatchNormalization()
+            self._activation2 = keras.layers.ReLU()
+
+            self._residual_block3 = [ResidualUnit(filters, initializer, activation) for _ in range(3)]
+            self._conv3 = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer,
+                                              use_bias=False)
+            self._norm3 = keras.layers.BatchNormalization()
+            self._activation3 = keras.layers.ReLU()
 
             self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._city_tiles_probs1 = keras.layers.Dense(4, activation="softmax", kernel_initializer=initializer_random)
@@ -183,8 +199,26 @@ def actor_critic_with_skip_connections():
             x = self._norm(x, training=training)
             x = self._activation(x)
 
-            for layer in self._residual_block:
+            s = x
+            for layer in self._residual_block1:
                 x = layer(x, training=training)
+            x = self._conv1(x)
+            x = self._norm1(x, training=training)
+            x = self._activation1(s + x)
+
+            s = x
+            for layer in self._residual_block2:
+                x = layer(x, training=training)
+            x = self._conv2(x)
+            x = self._norm2(x, training=training)
+            x = self._activation2(s + x)
+
+            s = x
+            for layer in self._residual_block3:
+                x = layer(x, training=training)
+            x = self._conv3(x)
+            x = self._norm3(x, training=training)
+            x = self._activation3(s + x)
 
             shape_x = tf.shape(x)
             y = tf.reshape(x, (shape_x[0], -1, shape_x[-1]))
