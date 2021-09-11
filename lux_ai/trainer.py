@@ -103,7 +103,7 @@ class Agent(abc.ABC):
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        # for sample in dataset.take(10):
+        # for sample in ds_train.take(10):
         #     observations = sample[0][0].numpy()
         #     actions_masks = sample[0][1].numpy()
         #     actions_probs = sample[1][0].numpy()
@@ -113,6 +113,11 @@ class Agent(abc.ABC):
         #     value_output_v = value_output.numpy()
         #     # skewed_loss = loss_function(sample[1][0], probs_output)
         #     # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+
+        early_stop_callback = tf.keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=3
+        )
 
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
@@ -126,10 +131,10 @@ class Agent(abc.ABC):
                 #                  tf.keras.metrics.MeanAbsoluteError()]
             },
             loss_weights={"output_1": 2.0,
-                          "output_2": 0.1}
+                          "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=1, validation_data=ds_valid)
+        self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
