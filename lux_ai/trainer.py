@@ -96,14 +96,14 @@ class Agent(abc.ABC):
                               )
         dataset = dataset.batch(self._batch_size)  # , drop_remainder=True)
 
-        for sample in dataset.take(10):
-            observations = sample[0][0].numpy()
-            actions_masks = sample[0][1].numpy()
-            actions_probs = sample[1][0].numpy()
-            total_rewards = sample[1][1].numpy()
-            probs_output, value_output = self._model((observations, actions_masks))
-            probs_output_v = probs_output.numpy()
-            value_output_v = value_output.numpy()
+        # for sample in dataset.take(10):
+        #     observations = sample[0][0].numpy()
+        #     actions_masks = sample[0][1].numpy()
+        #     actions_probs = sample[1][0].numpy()
+        #     total_rewards = sample[1][1].numpy()
+        #     probs_output, value_output = self._model((observations, actions_masks))
+        #     probs_output_v = probs_output.numpy()
+        #     value_output_v = value_output.numpy()
         #     # skewed_loss = loss_function(sample[1][0], probs_output)
         #     # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
@@ -122,7 +122,7 @@ class Agent(abc.ABC):
                           "output_2": 0.1}
         )
 
-        self._model.fit(dataset, epochs=10)
+        self._model.fit(dataset, epochs=30)
         # self._model.fit(dataset, steps_per_epoch=100, epochs=10)
         weights = self._model.get_weights()
         data = {

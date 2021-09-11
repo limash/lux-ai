@@ -8,7 +8,7 @@ CONF_ActorCritic = {
 
 CONF_Scraper = {
     "lux_version": "3.1.0",
-    "team_name": "MinkeR",
+    "team_name": "Looking for Halite",
 }
 
 CONF_Single = {
@@ -16,7 +16,7 @@ CONF_Single = {
     # "default_lr": 1e-8,
     # "n_points": 40,
     # "buffer_size": 1000000,
-    "batch_size": 10,
+    "batch_size": 100,
     # "init_episodes": 25,
     # "iterations_number": 1000,
     # "save_interval": 100,

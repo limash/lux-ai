@@ -85,6 +85,19 @@ class Agent(abc.ABC):
         width, height = current_game_states[0].map.width, current_game_states[0].map.height
         shift = int((32 - width) / 2)  # to make all feature maps 32x32
 
+        def check_actions(actions, player_units_dict, player_cts_list):
+            new_actions = []
+            for action in actions:
+                action_list = action.split(" ")
+                if action_list[0] not in ["r", "bw", "bc"]:
+                    if action_list[1] in player_units_dict.keys():
+                        new_actions.append(action)
+                else:
+                    x, y = action_list[1], action_list[2]
+                    if [int(x), int(y)] in player_cts_list:
+                        new_actions.append(action)
+            return new_actions
+
         def update_units_actions(actions, player_units_dict):
             units_with_actions = []
             for action in actions:
@@ -211,9 +224,13 @@ class Agent(abc.ABC):
             # get actions from a record, action for the current obs is in the next step of data
             actions_1 = data["steps"][step + 1][0]["action"]
             actions_2 = data["steps"][step + 1][1]["action"]
-            # if no action and unit can act, add "m {id} c"
+            # copy actions since they we need preprocess them before recording
             actions_1_vec = actions_1.copy()
             actions_2_vec = actions_2.copy()
+            # check actions and erase invalid ones
+            actions_1_vec = check_actions(actions_1_vec, player1_units_dict_active, player1_ct_list_active)
+            actions_2_vec = check_actions(actions_2_vec, player2_units_dict_active, player2_ct_list_active)
+            # if no action and unit can act, add "m {id} c"
             actions_1_vec = update_units_actions(actions_1_vec, player1_units_dict_active)
             actions_2_vec = update_units_actions(actions_2_vec, player2_units_dict_active)
             # in no action and ct can act, add "idle {x} {y}"
