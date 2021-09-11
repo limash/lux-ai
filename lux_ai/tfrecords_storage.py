@@ -33,7 +33,7 @@ def to_tfrecord(reward, action_probs, action_mask, observation):
 
 
 def write_tfrecord(ds, record_number, record_name):
-    filename = f"data/tfrecords/imitator/{record_name}.tfrec"
+    filename = f"data/tfrecords/imitator/train/{record_name}.tfrec"
 
     with tf.io.TFRecordWriter(filename) as out_file:
         for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
@@ -115,7 +115,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
     write_tfrecord(dataset, record_number, record_name)
 
 
-def read_records_for_imitator(feature_maps_shape, actions_shape):
+def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
     # to allow order-altering optimizations.
@@ -144,7 +144,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape):
     option_no_order = tf.data.Options()
     option_no_order.experimental_deterministic = False
 
-    filenames = tf.io.gfile.glob("data/tfrecords/imitator/" + "*.tfrec")
+    filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)

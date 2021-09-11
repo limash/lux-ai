@@ -30,8 +30,6 @@ class Agent(abc.ABC):
                            tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
             dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
             self._model(dummy_input)
-        elif config["model_name"] == "actor_critic_functional":
-            self._model = models.actor_critic_functional(self._feature_maps_shape, self._actions_shape)
         else:
             raise ValueError
 
@@ -86,15 +84,24 @@ class Agent(abc.ABC):
         # batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         # dataset = batched_dataset.map(tools.merge_first_two_dimensions)
 
-        dataset = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape)
-        # dataset = dataset.map(lambda x1, x2, x3, x4: ((x1, x2), (x3, x4)))
-        dataset = dataset.map(lambda x1, x2, x3, x4: ((tf.cast(x1, dtype=tf.float32),
-                                                       tf.cast(x2, dtype=tf.float32)),
-                                                      (tf.cast(x3, dtype=tf.float32),
-                                                       tf.cast(x4, dtype=tf.float32))
-                                                      )
-                              )
-        dataset = dataset.batch(self._batch_size)  # , drop_remainder=True)
+        ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
+                                                               "data/tfrecords/imitator/train/")
+        ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
+                                                               "data/tfrecords/imitator/validation/")
+        ds_train = ds_train.map(lambda x1, x2, x3, x4: ((tf.cast(x1, dtype=tf.float32),
+                                                         tf.cast(x2, dtype=tf.float32)),
+                                                        (tf.cast(x3, dtype=tf.float32),
+                                                         tf.cast(x4, dtype=tf.float32))
+                                                        )
+                                )
+        ds_valid = ds_valid.map(lambda x1, x2, x3, x4: ((tf.cast(x1, dtype=tf.float32),
+                                                         tf.cast(x2, dtype=tf.float32)),
+                                                        (tf.cast(x3, dtype=tf.float32),
+                                                         tf.cast(x4, dtype=tf.float32))
+                                                        )
+                                )
+        ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
+        ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in dataset.take(10):
         #     observations = sample[0][0].numpy()
@@ -122,8 +129,7 @@ class Agent(abc.ABC):
                           "output_2": 0.1}
         )
 
-        self._model.fit(dataset, epochs=30)
-        # self._model.fit(dataset, steps_per_epoch=100, epochs=10)
+        self._model.fit(ds_train, epochs=1, validation_data=ds_valid)
         weights = self._model.get_weights()
         data = {
             'weights': weights,
