@@ -1,40 +1,29 @@
 # move all imports inside functions to use ray.remote multitasking
 
 
-def actor_critic():
+def actor_critic_with_scan():
     import tensorflow as tf
     import tensorflow.keras as keras
 
-    def height_padding(x, height):
-        x = tf.concat([x[:, -height:, :, :], x, x[:, :height, :, :]], 1)
-        return x
-
-    def width_padding(x, width):
-        x = tf.concat([x[:, :, -width:, :], x, x[:, :, :width, :]], 2)
-        return x
-
-    class CrossUnit(keras.layers.Layer):
+    class ScanUnit(keras.layers.Layer):
         def __init__(self, filters, initializer, size, **kwargs):
             super().__init__(**kwargs)
 
-            self._height, self._width = size
+            height, width = size
             self._filters = filters
-            self._conv_col = keras.layers.Conv2D(filters/4, (self._height, 1),
+            self._conv_col = keras.layers.Conv2D(1, (int(height / 2), 1), padding="same",
                                                  kernel_initializer=initializer, use_bias=False)
-            self._conv_row = keras.layers.Conv2D(filters/4, (1, self._width),
+            self._conv_row = keras.layers.Conv2D(1, (1, int(width / 2)), padding="same",
                                                  kernel_initializer=initializer, use_bias=False)
-            self._conv = keras.layers.Conv2D(filters/2, 3, kernel_initializer=initializer, use_bias=False)
+            self._conv = keras.layers.Conv2D(filters - 2, 3, kernel_initializer=initializer,
+                                             padding="same", use_bias=False)
             self._norm = keras.layers.BatchNormalization()
 
         def call(self, inputs, training=False, **kwargs):
             x = inputs
-            y = height_padding(x, self._height//2)
-            y = self._conv_col(y)
-            z = width_padding(x, self._width//2)
-            z = self._conv_row(z)
-            o = circular_padding(x)
-            o = self._conv(o)
-            # x = y + z
+            y = self._conv_col(x)
+            z = self._conv_row(x)
+            o = self._conv(x)
             x = tf.concat([y, z, o], axis=-1)
             outputs = self._norm(x, training=training)
             return outputs
@@ -62,15 +51,14 @@ def actor_critic():
             super().__init__(**kwargs)
 
             filters = 128
-            layers = 12
+            layers = 10
 
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
             initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
             activation = keras.activations.relu
 
-            self._conv = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer, use_bias=False)
-            self._norm = keras.layers.BatchNormalization()
-            self._activation = keras.layers.ReLU()
+            self._scan1 = ScanUnit(filters, initializer, (32, 32))
+            self._scan2 = ScanUnit(filters, initializer, (32, 32))
             self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
 
             self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
@@ -90,9 +78,8 @@ def actor_critic():
 
             x = features
 
-            x = self._conv(x)
-            x = self._norm(x, training=training)
-            x = self._activation(x)
+            x = self._scan1(x)
+            x = self._scan2(x)
 
             for layer in self._residual_block:
                 x = layer(x, training=training)
