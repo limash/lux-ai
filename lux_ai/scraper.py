@@ -53,7 +53,7 @@ class Agent(abc.ABC):
         self._team_name = config["team_name"]
 
         self._files = glob.glob("./data/jsons/*.json")
-        self._already_saved_files = glob.glob("./data/tfrecords/imitator/*.tfrec")
+        self._already_saved_files = glob.glob("./data/tfrecords/imitator/train/*.tfrec")
 
     def _scrape(self, data, team_name=None):
         """
@@ -311,7 +311,7 @@ class Agent(abc.ABC):
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
                 raw_name = pathlib.Path(file_name).stem
-                if f"./data/tfrecords/imitator/{raw_name}.tfrec" in self._already_saved_files:
+                if f"./data/tfrecords/imitator/train/{raw_name}.tfrec" in self._already_saved_files:
                     print(f"File {file_name}; {i}; is already saved.")
                     continue
                 data = json.load(read_file)
