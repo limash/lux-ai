@@ -54,8 +54,7 @@ def actor_critic_separate():
 
         def call(self, inputs, training=False, mask=None):
             features, actions_mask = inputs
-            # features_v = features.numpy()
-            # actions_mask_v = actions_mask.numpy()
+            batch_size = actions_mask.shape[0]
 
             is_tile = actions_mask[:, 0]
             is_work = actions_mask[:, 4]
@@ -80,14 +79,19 @@ def actor_critic_separate():
                 for layer in self._residual_block_tile:
                     tile = layer(tile, training=training)
 
-                z_tile = (tile * tile_features[:, 0, :, :, :1])
+                z_tile = tile * tile_features[:, 0, :, :, :1]
                 shape_z_tile = tf.shape(z_tile)
                 z_tile = tf.reshape(z_tile, (shape_z_tile[0], -1, shape_z_tile[-1]))
                 z_tile = tf.reduce_sum(z_tile, axis=1)
                 t = self._city_tiles_probs0(z_tile)
                 t = self._city_tiles_probs1(t)
+
+                t_shape = [batch_size, 4]
+                indices = tf.where(is_tile)
+                data = t
+                tt = tf.scatter_nd(indices=indices, updates=data, shape=t_shape)
             else:
-                t = actions_mask[:, :4]
+                tt = actions_mask[:, :4]
 
             # workers
             work = tf.gather(x, indices=tf.where(is_work))
@@ -96,14 +100,19 @@ def actor_critic_separate():
                 for layer in self._residual_block_work:
                     work = layer(work, training=training)
 
-                z_work = (work * work_features[:, 0, :, :, :1])
+                z_work = work * work_features[:, 0, :, :, :1]
                 shape_z_work = tf.shape(z_work)
                 z_work = tf.reshape(z_work, (shape_z_work[0], -1, shape_z_work[-1]))
                 z_work = tf.reduce_sum(z_work, axis=1)
                 w = self._workers_probs0(z_work)
                 w = self._workers_probs1(w)
+
+                w_shape = [batch_size, 19]
+                indices = tf.where(is_work)
+                data = w
+                ww = tf.scatter_nd(indices=indices, updates=data, shape=w_shape)
             else:
-                w = actions_mask[:, 4:23]
+                ww = actions_mask[:, 4:23]
 
             # carts
             cart = tf.gather(x, indices=tf.where(is_cart))
@@ -112,17 +121,21 @@ def actor_critic_separate():
                 for layer in self._residual_block_cart:
                     cart = layer(cart, training=training)
 
-                z_cart = (work * cart_features[:, 0, :, :, :1])
+                z_cart = cart * cart_features[:, 0, :, :, :1]
                 shape_z_cart = tf.shape(z_cart)
                 z_cart = tf.reshape(z_cart, (shape_z_cart[0], -1, shape_z_cart[-1]))
                 z_cart = tf.reduce_sum(z_cart, axis=1)
                 c = self._carts_probs0(z_cart)
                 c = self._carts_probs1(c)
-            else:
-                c = actions_mask[:, 23:]
 
-            probs = tf.concat([t, w, c], axis=1)
-            # probs = probs * actions_mask
+                c_shape = [batch_size, 17]
+                indices = tf.where(is_cart)
+                data = c
+                cc = tf.scatter_nd(indices=indices, updates=data, shape=c_shape)
+            else:
+                cc = actions_mask[:, 23:]
+
+            probs = tf.concat([tt, ww, cc], axis=1)
 
             # value
             shape_x = tf.shape(x)

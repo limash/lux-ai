@@ -24,7 +24,7 @@ class Agent(abc.ABC):
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = self._actions_number = len(action_vector)
         if config["model_name"] == "actor_critic_custom":
-            self._model = models.actor_critic_custom()
+            self._model = models.actor_critic_separate()
             # launch a model once to define structure
             dummy_input = (tf.ones(self._feature_maps_shape, dtype=tf.float32),
                            tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
@@ -123,15 +123,15 @@ class Agent(abc.ABC):
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
             loss={
                 "output_1": tf.keras.losses.KLDivergence(),
-                "output_2": tf.keras.losses.MeanSquaredError()
+                "output_2": None  # tf.keras.losses.MeanSquaredError()
             },
             metrics={
                 "output_1": [tf.keras.metrics.CategoricalAccuracy()],
                 # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
                 #                  tf.keras.metrics.MeanAbsoluteError()]
             },
-            loss_weights={"output_1": 2.0,
-                          "output_2": 0.1},
+            loss_weights={"output_1": 2.0}  # ,
+            # "output_2": 0.1},
         )
 
         self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback])
