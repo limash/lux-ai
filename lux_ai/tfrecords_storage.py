@@ -51,9 +51,7 @@ def write_tfrecord(ds, record_number, record_name):
 def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
                         feature_maps_shape, actions_number, record_number, record_name):
 
-    def data_gen():
-        """Generator, which softens very skewed distribution of actions
-        repeating rare and skipping very often actions"""
+    def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
                 continue
@@ -62,6 +60,26 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                 # unit_type = key.split("_")[0]
                 # if unit_type != "u":
                 #     continue
+                actions = unit.actions
+                counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
+                for point in unit.data:
+                    # point [action, action_probs, actions_mask, observation]
+                    action = point[0]
+                    # store observation, action_mask, action_probs, reward
+                    yield point[3], point[2], point[1], final_reward
+                    counters += action
+
+    def data_gen_soft():
+        """Generator, which softens very skewed distribution of actions
+        repeating rare and skipping very often actions"""
+        for j, player_data in enumerate((player1_data, player2_data)):
+            if player_data is None:
+                continue
+            final_reward = final_reward_1 if j == 0 else final_reward_2
+            for key, unit in player_data.items():
+                unit_type = key.split("_")[0]
+                if unit_type != "u":
+                    continue
                 median = np.median(unit.actions[np.nonzero(unit.actions)])
                 actions = unit.actions
                 multipliers = np.divide(median, actions, out=np.zeros_like(actions), where=actions != 0)
@@ -103,7 +121,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
     #     result.append(x)
 
     dataset = tf.data.Dataset.from_generator(
-        data_gen,
+        data_gen_soft,
         output_signature=(
             tf.TensorSpec(shape=feature_maps_shape, dtype=tf.float16),
             tf.TensorSpec(shape=actions_number, dtype=tf.float16),
