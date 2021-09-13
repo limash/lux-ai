@@ -306,7 +306,7 @@ class Agent(abc.ABC):
             data = json.load(read_file)
         self._scrape(data)
 
-    def scrape_all(self, files_to_save=5):
+    def scrape_all(self, files_to_save=4):
         j = 0
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:

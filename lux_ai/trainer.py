@@ -24,7 +24,7 @@ class Agent(abc.ABC):
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = self._actions_number = len(action_vector)
         if config["model_name"] == "actor_critic_custom":
-            self._model = models.actor_critic_separate()
+            self._model = models.actor_critic_custom()
             # launch a model once to define structure
             dummy_input = (tf.ones(self._feature_maps_shape, dtype=tf.float32),
                            tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
@@ -134,7 +134,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback])
+        self._model.fit(ds_train, epochs=10, validation_data=ds_valid, callbacks=[early_stop_callback])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
