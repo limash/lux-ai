@@ -130,11 +130,11 @@ class Agent(abc.ABC):
                 # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
                 #                  tf.keras.metrics.MeanAbsoluteError()]
             },
-            loss_weights={"output_1": 2.0}  # ,
+            # loss_weights={"output_1": 2.0}  # ,
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=10, validation_data=ds_valid, callbacks=[early_stop_callback])
+        self._model.fit(ds_train, epochs=20, validation_data=ds_valid, callbacks=[early_stop_callback])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
