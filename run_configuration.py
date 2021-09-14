@@ -8,7 +8,8 @@ CONF_ActorCritic = {
 
 CONF_Scraper = {
     "lux_version": "3.1.0",
-    "team_name": "Looking for Halite",
+    "team_name": None,
+    "only_wins": True,
 }
 
 CONF_Single = {

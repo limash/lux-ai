@@ -51,11 +51,12 @@ class Agent(abc.ABC):
 
         self._lux_version = config["lux_version"]
         self._team_name = config["team_name"]
+        self._only_wins = config["only_wins"]
 
         self._files = glob.glob("./data/jsons/*.json")
         self._already_saved_files = glob.glob("./data/tfrecords/imitator/train/*.tfrec")
 
-    def _scrape(self, data, team_name=None):
+    def _scrape(self, data, team_name=None, only_wins=False):
         """
         Collects trajectories from an episode to the buffer.
 
@@ -225,8 +226,15 @@ class Agent(abc.ABC):
             actions_1 = data["steps"][step + 1][0]["action"]
             actions_2 = data["steps"][step + 1][1]["action"]
             # copy actions since they we need preprocess them before recording
-            actions_1_vec = actions_1.copy()
-            actions_2_vec = actions_2.copy()
+            if actions_1 is None:
+                actions_1_vec = []
+            else:
+                actions_1_vec = actions_1.copy()
+            if actions_2 is None:
+                actions_2_vec = []
+            else:
+                actions_2_vec = actions_2.copy()
+
             # check actions and erase invalid ones
             actions_1_vec = check_actions(actions_1_vec, player1_units_dict_active, player1_ct_list_active)
             actions_2_vec = check_actions(actions_2_vec, player2_units_dict_active, player2_ct_list_active)
@@ -260,6 +268,10 @@ class Agent(abc.ABC):
         # print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
 
         reward1, reward2 = data["rewards"][0], data["rewards"][1]
+        if reward1 is None:
+            reward1 = -1
+        if reward2 is None:
+            reward2 = -1
         if reward1 > reward2:
             final_reward_1 = tf.constant(1, dtype=tf.float16)
             final_reward_2 = tf.constant(-1, dtype=tf.float16)
@@ -273,7 +285,15 @@ class Agent(abc.ABC):
         progress = tf.cast(progress, dtype=tf.float16)
 
         if team_of_interest == -1:
-            output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+            if only_wins:
+                if reward1 > reward2:
+                    output = (player1_data, None), (final_reward_1, None), progress
+                elif reward1 < reward2:
+                    output = (None, player2_data), (None, final_reward_2), progress
+                else:
+                    output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+            else:
+                output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
         elif team_of_interest == 1:
             output = (player1_data, None), (final_reward_1, None), progress
         elif team_of_interest == 2:
@@ -306,7 +326,7 @@ class Agent(abc.ABC):
             data = json.load(read_file)
         self._scrape(data)
 
-    def scrape_all(self, files_to_save=4):
+    def scrape_all(self, files_to_save=3):
         j = 0
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
@@ -320,7 +340,8 @@ class Agent(abc.ABC):
                     continue
 
             (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data,
-                                                                                                    self._team_name)
+                                                                                                    self._team_name,
+                                                                                                    self._only_wins)
             if player1_data == player2_data is None:
                 print(f"File {file_name}; {i}; does not have a required team.")
                 continue
