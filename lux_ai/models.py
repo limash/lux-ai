@@ -311,6 +311,9 @@ def actor_critic_custom():
             self._activation = keras.layers.ReLU()
             self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
 
+            self._depthwise = keras.layers.DepthwiseConv2D(32)
+            self._flatten = keras.layers.Flatten()
+
             self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._city_tiles_probs1 = keras.layers.Dense(4, activation="softmax", kernel_initializer=initializer_random)
             self._workers_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
@@ -337,10 +340,13 @@ def actor_critic_custom():
             y = tf.reshape(x, (shape_x[0], -1, shape_x[-1]))
             y = tf.reduce_mean(y, axis=1)
 
-            z = (x * features[:, :, :, :1])
-            shape_z = tf.shape(z)
-            z = tf.reshape(z, (shape_z[0], -1, shape_z[-1]))
-            z = tf.reduce_sum(z, axis=1)
+            z1 = (x * features[:, :, :, :1])
+            shape_z = tf.shape(z1)
+            z1 = tf.reshape(z1, (shape_z[0], -1, shape_z[-1]))
+            z1 = tf.reduce_sum(z1, axis=1)
+            z2 = self._depthwise(x)
+            z2 = self._flatten(z2)
+            z = tf.concat([z1, z2], axis=1)
 
             t = self._city_tiles_probs0(z)
             t = self._city_tiles_probs1(t)
