@@ -8,8 +8,8 @@ CONF_ActorCritic = {
 
 CONF_Scraper = {
     "lux_version": "3.1.0",
-    "team_name": None,
-    "only_wins": True,
+    "team_name": "Toad Brigade",
+    "only_wins": False,
 }
 
 CONF_Single = {

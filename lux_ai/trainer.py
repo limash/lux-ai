@@ -1,7 +1,7 @@
 import abc
 import pickle
 
-# import numpy as np
+import numpy as np
 import tensorflow as tf
 # import reverb
 
@@ -33,12 +33,13 @@ class Agent(abc.ABC):
         else:
             raise ValueError
 
-        # class_weights = np.ones(actions_shape, dtype=np.single)
-        # class_weights[3] = 0.01
-        # class_weights[8] = 0.1
-        # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
-        # self._class_weights = tf.expand_dims(class_weights, axis=0)
-        # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
+        class_weights = np.ones(self._actions_shape, dtype=np.single)
+        class_weights[3] = 0.1
+        class_weights[8] = 0.5
+        class_weights[22] = 2.
+        class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+        self._class_weights = tf.expand_dims(class_weights, axis=0)
+        self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -103,7 +104,7 @@ class Agent(abc.ABC):
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        # for sample in ds_train.take(10):
+        # for sample in ds_valid.take(10):
         #     observations = sample[0][0].numpy()
         #     actions_masks = sample[0][1].numpy()
         #     actions_probs = sample[1][0].numpy()
@@ -111,8 +112,8 @@ class Agent(abc.ABC):
         #     probs_output, value_output = self._model((observations, actions_masks))
         #     probs_output_v = probs_output.numpy()
         #     value_output_v = value_output.numpy()
-        #     # skewed_loss = loss_function(sample[1][0], probs_output)
-        #     # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+        #     skewed_loss = self._loss_function(sample[1][0], probs_output)
+        #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         early_stop_callback = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
@@ -122,7 +123,7 @@ class Agent(abc.ABC):
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
             loss={
-                "output_1": tf.keras.losses.KLDivergence(),
+                "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
             },
             metrics={
@@ -134,7 +135,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=20, validation_data=ds_valid, callbacks=[early_stop_callback])
+        self._model.fit(ds_train, epochs=10, validation_data=ds_valid, callbacks=[early_stop_callback])
         weights = self._model.get_weights()
         data = {
             'weights': weights,

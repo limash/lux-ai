@@ -57,9 +57,9 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                 continue
             final_reward = final_reward_1 if j == 0 else final_reward_2
             for key, unit in player_data.items():
-                # unit_type = key.split("_")[0]
-                # if unit_type != "u":
-                #     continue
+                unit_type = key.split("_")[0]
+                if unit_type != "u":
+                    continue
                 actions = unit.actions
                 counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
                 for point in unit.data:
@@ -121,7 +121,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
     #     result.append(x)
 
     dataset = tf.data.Dataset.from_generator(
-        data_gen_soft,
+        data_gen_all,
         output_signature=(
             tf.TensorSpec(shape=feature_maps_shape, dtype=tf.float16),
             tf.TensorSpec(shape=actions_number, dtype=tf.float16),

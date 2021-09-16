@@ -333,6 +333,8 @@ class Agent(abc.ABC):
                 raw_name = pathlib.Path(file_name).stem
                 if f"./data/tfrecords/imitator/train/{raw_name}.tfrec" in self._already_saved_files:
                     print(f"File {file_name}; {i}; is already saved.")
+                    # data = json.load(read_file)
+                    # print(f"Team 0: {data['info']['TeamNames'][0]}, Team 1: {data['info']['TeamNames'][1]}")
                     continue
                 data = json.load(read_file)
                 if data["version"] != self._lux_version:
