@@ -273,7 +273,147 @@ def actor_critic_with_skip_connections():
     return model
 
 
-def actor_critic_custom():
+def actor_critic_squeeze():
+    import tensorflow as tf
+    import tensorflow.keras as keras
+
+    class ResidualUnit(keras.layers.Layer):
+        def __init__(self, filters, initializer, activation, **kwargs):
+            super().__init__(**kwargs)
+
+            self._filters = filters
+            self._activation = activation
+            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer, padding="same", use_bias=False)
+            self._norm = keras.layers.BatchNormalization()
+
+        def call(self, inputs, training=False, **kwargs):
+            x = self._conv(inputs)
+            x = self._norm(x, training=training)
+            return self._activation(inputs + x)
+
+        def compute_output_shape(self, batch_input_shape):
+            batch, x, y, _ = batch_input_shape
+            return [batch, x, y, self._filters]
+
+    class ResidualModel(keras.Model):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+
+            filters = 128
+            layers = 12
+
+            initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
+            initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
+            activation = keras.activations.relu
+
+            self._conv = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer, use_bias=False)
+            self._norm = keras.layers.BatchNormalization()
+            self._activation = keras.layers.ReLU()
+            self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
+
+            self._depthwise = keras.layers.DepthwiseConv2D(32)
+            self._flatten = keras.layers.Flatten()
+
+            self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+            self._city_tiles_probs1 = keras.layers.Dense(4, activation="softmax", kernel_initializer=initializer_random)
+            self._workers_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+            self._workers_probs1 = keras.layers.Dense(19, activation="softmax", kernel_initializer=initializer_random)
+            self._carts_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+            self._carts_probs1 = keras.layers.Dense(17, activation="softmax", kernel_initializer=initializer_random)
+
+            self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
+                                                activation=keras.activations.tanh)
+
+        def call(self, inputs, training=False, mask=None):
+            features, actions_mask = inputs
+            batch_size = actions_mask.shape[0]
+
+            features_padded = tf.pad(features, tf.constant([[0, 0], [6, 6], [6, 6], [0, 0]]), mode="CONSTANT")
+            units_layers = features_padded[:, :, :, :1]
+            units_coords = tf.cast(tf.where(units_layers), dtype=tf.int32)
+            min_x = units_coords[:, 1] - 6
+            max_x = units_coords[:, 1] + 6
+            min_y = units_coords[:, 2] - 6
+            max_y = units_coords[:, 2] + 6
+
+            features_padded_glob = tf.pad(features,
+                                          tf.constant([[0, 0], [32, 32], [32, 32], [0, 0]]),
+                                          mode="CONSTANT")
+            units_layers_glob = features_padded_glob[:, :, :, :1]
+            units_coords_glob = tf.cast(tf.where(units_layers_glob), dtype=tf.int32)
+            min_x_glob = units_coords_glob[:, 1] - 32
+            max_x_glob = units_coords_glob[:, 1] + 32
+            min_y_glob = units_coords_glob[:, 2] - 32
+            max_y_glob = units_coords_glob[:, 2] + 32
+
+            features_size = features.shape[-1]
+            t_shape = tf.constant([batch_size, 13, 13, -1])
+            features_v = features.numpy()
+            features_padded_v = features_padded.numpy()
+            features_padded_glob_v = features_padded_glob.numpy()
+
+            ta = tf.TensorArray(dtype=tf.float32, size=batch_size, dynamic_size=False)
+            ta_glob = tf.TensorArray(dtype=tf.float32, size=batch_size, dynamic_size=False)
+            for i in tf.range(batch_size):
+                piece = features_padded[i, min_x[i]: max_x[i] + 1, min_y[i]: max_y[i] + 1, :]
+                piece_v = piece.numpy()
+                ta = ta.write(i, piece)
+                piece_glob = features_padded_glob[i:i + 1,
+                                                  min_x_glob[i]: max_x_glob[i] + 1,
+                                                  min_y_glob[i]: max_y_glob[i] + 1,
+                                                  37:46]
+                # 17, 4; 5, 5
+                pooled_features = tf.nn.avg_pool(piece_glob, 5, 5, padding="VALID")
+                piece_glob_v = piece_glob.numpy()
+                pooled_features_v = pooled_features.numpy()
+                ta_glob = ta_glob.write(i, pooled_features[0, :, :, :])
+
+            features_prepared_1 = ta.stack()
+            features_prepared_2 = ta_glob.stack()
+            features_prepared = tf.concat([features_prepared_1, features_prepared_2], axis=-1)
+
+            x = features_prepared
+
+            x = self._conv(x)
+            x = self._norm(x, training=training)
+            x = self._activation(x)
+
+            for layer in self._residual_block:
+                x = layer(x, training=training)
+
+            shape_x = tf.shape(x)
+            y = tf.reshape(x, (shape_x[0], -1, shape_x[-1]))
+            y = tf.reduce_mean(y, axis=1)
+
+            z1 = (x * features[:, :, :, :1])
+            shape_z = tf.shape(z1)
+            z1 = tf.reshape(z1, (shape_z[0], -1, shape_z[-1]))
+            z1 = tf.reduce_sum(z1, axis=1)
+            z2 = self._depthwise(x)
+            z2 = self._flatten(z2)
+            z = tf.concat([z1, z2], axis=1)
+
+            t = self._city_tiles_probs0(z)
+            t = self._city_tiles_probs1(t)
+            w = self._workers_probs0(z)
+            w = self._workers_probs1(w)
+            c = self._carts_probs0(z)
+            c = self._carts_probs1(c)
+            probs = tf.concat([t, w, c], axis=1)
+            probs = probs * actions_mask
+
+            baseline = self._baseline(tf.concat([y, z], axis=1))
+
+            return probs, baseline
+
+        def get_config(self):
+            pass
+
+    model = ResidualModel()
+    return model
+
+
+def actor_critic_base():
     import tensorflow as tf
     import tensorflow.keras as keras
 
