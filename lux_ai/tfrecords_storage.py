@@ -121,7 +121,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
     #     result.append(x)
 
     dataset = tf.data.Dataset.from_generator(
-        data_gen_all,
+        data_gen_soft,
         output_signature=(
             tf.TensorSpec(shape=feature_maps_shape, dtype=tf.float16),
             tf.TensorSpec(shape=actions_number, dtype=tf.float16),

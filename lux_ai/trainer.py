@@ -33,13 +33,13 @@ class Agent(abc.ABC):
         else:
             raise ValueError
 
-        class_weights = np.ones(self._actions_shape, dtype=np.single)
-        class_weights[3] = 0.1
-        class_weights[8] = 0.5
-        class_weights[22] = 2.
-        class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
-        self._class_weights = tf.expand_dims(class_weights, axis=0)
-        self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
+        # class_weights = np.ones(self._actions_shape, dtype=np.single)
+        # class_weights[3] = 0.1
+        # class_weights[8] = 0.3
+        # class_weights[22] = 2.
+        # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+        # self._class_weights = tf.expand_dims(class_weights, axis=0)
+        # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -117,13 +117,13 @@ class Agent(abc.ABC):
 
         early_stop_callback = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=3
+            patience=2
         )
 
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
             loss={
-                "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
+                "output_1": tf.keras.losses.KLDivergence(),
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
             },
             metrics={
