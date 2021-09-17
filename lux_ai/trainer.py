@@ -24,9 +24,11 @@ class Agent(abc.ABC):
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = self._actions_number = len(action_vector)
         if config["model_name"] == "actor_critic_custom":
-            self._model = models.actor_critic_custom()
+            self._model = models.actor_critic_squeeze()
             # launch a model once to define structure
-            dummy_input = (tf.ones(self._feature_maps_shape, dtype=tf.float32),
+            dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
+            dummy_feature_maps[16, 16, :1] = 1
+            dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
                            tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
             dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
             self._model(dummy_input)
@@ -104,16 +106,16 @@ class Agent(abc.ABC):
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        # for sample in ds_valid.take(10):
-        #     observations = sample[0][0].numpy()
-        #     actions_masks = sample[0][1].numpy()
-        #     actions_probs = sample[1][0].numpy()
-        #     total_rewards = sample[1][1].numpy()
-        #     probs_output, value_output = self._model((observations, actions_masks))
-        #     probs_output_v = probs_output.numpy()
-        #     value_output_v = value_output.numpy()
-        #     skewed_loss = self._loss_function(sample[1][0], probs_output)
-        #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+        for sample in ds_valid.take(10):
+            observations = sample[0][0].numpy()
+            actions_masks = sample[0][1].numpy()
+            actions_probs = sample[1][0].numpy()
+            total_rewards = sample[1][1].numpy()
+            probs_output, value_output = self._model((observations, actions_masks))
+            probs_output_v = probs_output.numpy()
+            value_output_v = value_output.numpy()
+            skewed_loss = self._loss_function(sample[1][0], probs_output)
+            loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         early_stop_callback = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
