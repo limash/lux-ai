@@ -331,8 +331,8 @@ class Agent(abc.ABC):
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
                 raw_name = pathlib.Path(file_name).stem
-                if f"./data/tfrecords/imitator/train/{raw_name}.tfrec" in self._already_saved_files:
-                    print(f"File {file_name}; {i}; is already saved.")
+                if f"./data/tfrecords/imitator/train/{raw_name}_{self._team_name}.tfrec" in self._already_saved_files:
+                    print(f"File {file_name} for {self._team_name}; {i}; is already saved.")
                     # data = json.load(read_file)
                     # print(f"Team 0: {data['info']['TeamNames'][0]}, Team 1: {data['info']['TeamNames'][1]}")
                     continue
@@ -351,7 +351,8 @@ class Agent(abc.ABC):
                 print(f"File {file_name}; {i}; recording.")
 
             tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
-                                                  self._feature_maps_shape, self._actions_number, i, raw_name)
+                                                  self._feature_maps_shape, self._actions_number, i,
+                                                  raw_name+"_"+self._team_name)
             j += 1
             if j == files_to_save:
                 print(f"{files_to_save} files saved, exit.")
