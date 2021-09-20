@@ -86,6 +86,25 @@ class Agent(abc.ABC):
         #                                     )
         # batched_dataset = imitate_dataset.batch(self._batch_size, drop_remainder=True)
         # dataset = batched_dataset.map(tools.merge_first_two_dimensions)
+        # raw_dataset = tf.data.TFRecordDataset('/home/shamilyakubov/src/lux-ai/'
+        #                                       'data/tfrecords/imitator/train/26691017_Toad Brigade.tfrec')
+        # features = {
+        #     "observation": tf.io.FixedLenFeature([], tf.string),
+        #     "action_mask": tf.io.FixedLenFeature([], tf.string),
+        #     "action_probs": tf.io.FixedLenFeature([], tf.string),
+        #     "reward": tf.io.FixedLenFeature([], tf.float32),
+        # }
+        # for raw_record in raw_dataset.take(1):
+        #     raw_example = tf.train.Example()
+        #     raw_example.ParseFromString(raw_record.numpy())
+        #     print(raw_example)
+        #     example = tf.io.parse_single_example(raw_record, features)
+        #     observation = tf.io.parse_tensor(example["observation"], tf.string)
+        #     observation = tf.expand_dims(observation, axis=0)
+        #     observation = tf.io.deserialize_many_sparse(observation, dtype=tf.float16)
+        #     observation = tf.sparse.to_dense(observation)
+        #     observation = tf.squeeze(observation)
+        #     print("Trololo")
 
         ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/train/")
@@ -106,14 +125,14 @@ class Agent(abc.ABC):
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        # for sample in ds_valid.take(10):
-        #     observations = sample[0][0].numpy()
-        #     actions_masks = sample[0][1].numpy()
-        #     actions_probs = sample[1][0].numpy()
-        #     total_rewards = sample[1][1].numpy()
-        #     probs_output, value_output = self._model((observations, actions_masks))
-        #     probs_output_v = probs_output.numpy()
-        #     value_output_v = value_output.numpy()
+        for sample in ds_valid.take(10):
+            observations = sample[0][0].numpy()
+            actions_masks = sample[0][1].numpy()
+            actions_probs = sample[1][0].numpy()
+            total_rewards = sample[1][1].numpy()
+            probs_output, value_output = self._model((observations, actions_masks))
+            probs_output_v = probs_output.numpy()
+            value_output_v = value_output.numpy()
         #     skewed_loss = self._loss_function(sample[1][0], probs_output)
         #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 

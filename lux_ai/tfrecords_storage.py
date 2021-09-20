@@ -39,7 +39,8 @@ def write_tfrecord(ds, record_number, record_name):
         for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
             serial_action_probs = tf.io.serialize_tensor(action_probs)
             serial_action_mask = tf.io.serialize_tensor(action_mask)
-            serial_observation = tf.io.serialize_tensor(observation)
+            # serial_observation = tf.io.serialize_tensor(observation)
+            serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
             example = to_tfrecord(reward.numpy().astype(np.float32),
                                   serial_action_probs.numpy(),
                                   serial_action_mask.numpy(),
@@ -107,7 +108,11 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                         continue
 
                     # store observation, action_mask, action_probs, reward
-                    yield point[3], point[2], point[1], final_reward
+                    observation = tf.sparse.from_dense(tf.constant(point[3], dtype=tf.float16))
+                    actions_mask = tf.constant(point[2], dtype=tf.float16)
+                    actions_probs = tf.constant(point[1], dtype=tf.float16)
+                    reward = tf.constant(final_reward, dtype=tf.float16)
+                    yield observation, actions_mask, actions_probs, reward
                     counters += action
 
                     idx += 1
@@ -123,7 +128,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
     dataset = tf.data.Dataset.from_generator(
         data_gen_soft,
         output_signature=(
-            tf.TensorSpec(shape=feature_maps_shape, dtype=tf.float16),
+            tf.SparseTensorSpec(shape=feature_maps_shape, dtype=tf.float16),
             tf.TensorSpec(shape=actions_number, dtype=tf.float16),
             tf.TensorSpec(shape=actions_number, dtype=tf.float16),
             tf.TensorSpec(shape=(), dtype=tf.float16),
@@ -148,7 +153,12 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
         # decode the TFRecord
         example = tf.io.parse_single_example(example, features)
 
-        observation = tf.io.parse_tensor(example["observation"], tf.float16)
+        # observation = tf.io.parse_tensor(example["observation"], tf.float16)
+        observation = tf.io.parse_tensor(example["observation"], tf.string)
+        observation = tf.expand_dims(observation, axis=0)
+        observation = tf.io.deserialize_many_sparse(observation, dtype=tf.float16)
+        observation = tf.sparse.to_dense(observation)
+        observation = tf.squeeze(observation)
         observation.set_shape(feature_maps_shape)
         action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
         action_mask.set_shape(actions_shape)
@@ -164,7 +174,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    filenames_ds = filenames_ds.with_options(option_no_order)
+    # filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    ds = ds.shuffle(1000)
+    # ds = ds.shuffle(1000)
     return ds
