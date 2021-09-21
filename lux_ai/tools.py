@@ -4,9 +4,9 @@ from tensorflow.keras import backend
 import ray
 import gym
 
-from lux_gym.envs.lux.action_vectors import worker_action_mask, cart_action_mask, citytile_action_mask
+# from lux_gym.envs.lux.action_vectors import worker_action_mask, cart_action_mask, citytile_action_mask
 
-actions_masks = (worker_action_mask, cart_action_mask, citytile_action_mask)
+# actions_masks = (worker_action_mask, cart_action_mask, citytile_action_mask)
 
 
 def skewed_kldivergence_loss(class_weight):
@@ -38,7 +38,8 @@ def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
                                                                        acts_prob.items(),
                                                                        obs.items()):
             assert k1 == k2 == k3
-            point_value = [action, action_probs, actions_masks[i], observation]
+            # point_value = [action, action_probs, actions_masks[i], observation]
+            point_value = [action, action_probs, observation]
             if k1 in player_data.keys():
                 player_data[k1].append(point_value, current_step, action)
             else:

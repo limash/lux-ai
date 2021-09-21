@@ -3,11 +3,9 @@ import random
 import numpy as np
 import tensorflow as tf
 
-
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
 
 AUTO = tf.data.experimental.AUTOTUNE
 
@@ -22,10 +20,10 @@ def _float_feature(list_of_floats):
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
 
-def to_tfrecord(reward, action_probs, action_mask, observation):
+def to_tfrecord(reward, action_probs, observation):
     feature = {
         "observation": _bytestring_feature([observation]),
-        "action_mask": _bytestring_feature([action_mask]),
+        # "action_mask": _bytestring_feature([action_mask]),
         "action_probs": _bytestring_feature([action_probs]),
         "reward": _float_feature([reward]),
     }
@@ -36,14 +34,15 @@ def write_tfrecord(ds, record_number, record_name):
     filename = f"data/tfrecords/imitator/train/{record_name}.tfrec"
 
     with tf.io.TFRecordWriter(filename) as out_file:
-        for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
+        # for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
+        for n, (observation, action_probs, reward) in enumerate(ds):
             serial_action_probs = tf.io.serialize_tensor(action_probs)
-            serial_action_mask = tf.io.serialize_tensor(action_mask)
+            # serial_action_mask = tf.io.serialize_tensor(action_mask)
             # serial_observation = tf.io.serialize_tensor(observation)
             serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
             example = to_tfrecord(reward.numpy().astype(np.float32),
                                   serial_action_probs.numpy(),
-                                  serial_action_mask.numpy(),
+                                  # serial_action_mask.numpy(),
                                   serial_observation.numpy())
             out_file.write(example.SerializeToString())
         print(f"Wrote file #{record_number} {record_name}.tfrec containing {n} records")
@@ -51,7 +50,6 @@ def write_tfrecord(ds, record_number, record_name):
 
 def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
                         feature_maps_shape, actions_number, record_number, record_name):
-
     def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
@@ -64,10 +62,14 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                 actions = unit.actions
                 counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
                 for point in unit.data:
-                    # point [action, action_probs, actions_mask, observation]
+                    # point [action, action_probs, observation]
                     action = point[0]
-                    # store observation, action_mask, action_probs, reward
-                    yield point[3], point[2], point[1], final_reward
+                    # store observation, action_probs, reward
+                    observation = tf.sparse.from_dense(tf.constant(point[2], dtype=tf.float16))
+                    actions_probs = tf.constant(point[1], dtype=tf.float16)
+                    reward = tf.constant(final_reward, dtype=tf.float16)
+                    yield observation, actions_probs, reward
+                    # yield point[2], point[1], final_reward
                     counters += action
 
     def data_gen_soft():
@@ -81,9 +83,11 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                 unit_type = key.split("_")[0]
                 if unit_type != "u":
                     continue
-                median = np.median(unit.actions[np.nonzero(unit.actions)])
+                # median = np.median(unit.actions[np.nonzero(unit.actions)])
+                mean = np.mean(unit.actions[np.nonzero(unit.actions)])
                 actions = unit.actions
-                multipliers = np.divide(median, actions, out=np.zeros_like(actions), where=actions != 0)
+                # multipliers = np.divide(median, actions, out=np.zeros_like(actions), where=actions != 0)
+                multipliers = np.divide(mean, actions, out=np.zeros_like(actions), where=actions != 0)
                 final_idx = len(unit.data)
                 counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
                 if np.nonzero(unit.actions)[0].shape[0] == 1:
@@ -92,7 +96,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                 else:
                     idx = 0
                 while True:
-                    # point [action, action_probs, actions_mask, observation]
+                    # point [action, action_probs, observation]
                     point = unit.data[idx]
                     action = point[0]
                     multiplier = multipliers[np.nonzero(action)][0]
@@ -107,12 +111,11 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                             break
                         continue
 
-                    # store observation, action_mask, action_probs, reward
-                    observation = tf.sparse.from_dense(tf.constant(point[3], dtype=tf.float16))
-                    actions_mask = tf.constant(point[2], dtype=tf.float16)
+                    # store observation, action_probs, reward
+                    observation = tf.sparse.from_dense(tf.constant(point[2], dtype=tf.float16))
                     actions_probs = tf.constant(point[1], dtype=tf.float16)
                     reward = tf.constant(final_reward, dtype=tf.float16)
-                    yield observation, actions_mask, actions_probs, reward
+                    yield observation, actions_probs, reward
                     counters += action
 
                     idx += 1
@@ -120,16 +123,15 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                         break
 
     # result = []
-    # generator = data_gen()
+    # generator = data_gen_all()
     # while len(result) < 10:
     #     x = next(generator)
     #     result.append(x)
 
     dataset = tf.data.Dataset.from_generator(
-        data_gen_soft,
+        data_gen_all,
         output_signature=(
             tf.SparseTensorSpec(shape=feature_maps_shape, dtype=tf.float16),
-            tf.TensorSpec(shape=actions_number, dtype=tf.float16),
             tf.TensorSpec(shape=actions_number, dtype=tf.float16),
             tf.TensorSpec(shape=(), dtype=tf.float16),
         ))

@@ -6,7 +6,7 @@ import tensorflow as tf
 # import reverb
 
 from lux_ai import models, tools, tfrecords_storage
-from lux_gym.envs.lux.action_vectors import action_vector, worker_action_mask
+from lux_gym.envs.lux.action_vectors import action_vector  # , worker_action_mask
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -28,8 +28,9 @@ class Agent(abc.ABC):
             # launch a model once to define structure
             dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
             dummy_feature_maps[16, 16, :1] = 1
-            dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
-                           tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
+            # dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
+            #                tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
+            dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
             dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
             self._model(dummy_input)
         else:

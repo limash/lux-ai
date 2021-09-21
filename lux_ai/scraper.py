@@ -10,7 +10,7 @@ import gym
 
 from lux_ai import tools, tfrecords_storage
 # from lux_ai.dm_reverb_storage import send_data
-from lux_gym.envs.lux.action_vectors import action_vector
+from lux_gym.envs.lux.action_vectors import action_vector, action_vector_ct, actions_number
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -34,7 +34,7 @@ class Agent(abc.ABC):
             # num_collectors: a total amount of collectors
         """
         self._n_players = 2
-        self._actions_number = len(action_vector)
+        self._actions_number = actions_number
         self._env_name = config["environment"]
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
@@ -147,12 +147,13 @@ class Agent(abc.ABC):
                         unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
                     except KeyError:  # these is no such active unit to take action
                         continue
-                    try:
-                        direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
-                                                                                             dest_name].pos)
-                        action_vector_name = f"{unit_type}_t{direction}{resourceType}"
-                    except KeyError:  # there is no such destination unit
-                        action_vector_name = f"{unit_type}_mc"
+                    action_vector_name = f"{unit_type}_mc"  # REPLACEMENT
+                    # try:
+                    #     direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
+                    #                                                                          dest_name].pos)
+                    #     action_vector_name = f"{unit_type}_t{direction}{resourceType}"
+                    # except KeyError:  # there is no such destination unit
+                    #     action_vector_name = f"{unit_type}_mc"
                     if unit_type == "w":
                         actions_dict["workers"][unit_name] = action_vector[action_vector_name]
                     else:
@@ -163,29 +164,30 @@ class Agent(abc.ABC):
                     actions_dict["workers"][unit_name] = action_vector[action_vector_name]
                 elif action_list[0] == "p":  # "p {id}"
                     unit_name = action_list[1]
-                    action_vector_name = "w_pillage"
+                    # action_vector_name = "w_pillage"
+                    action_vector_name = "w_mc"  # REPLACEMENT
                     actions_dict["workers"][unit_name] = action_vector[action_vector_name]
                 # city tiles
                 elif action_list[0] == "r":  # "r {pos.x} {pos.y}"
                     x, y = int(action_list[1]), int(action_list[2])
                     unit_name = f"ct_{y + shift}_{x + shift}"
                     action_vector_name = "ct_research"
-                    actions_dict["city_tiles"][unit_name] = action_vector[action_vector_name]
+                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
                 elif action_list[0] == "bw":  # "bw {pos.x} {pos.y}"
                     x, y = int(action_list[1]), int(action_list[2])
                     unit_name = f"ct_{y + shift}_{x + shift}"
                     action_vector_name = "ct_build_worker"
-                    actions_dict["city_tiles"][unit_name] = action_vector[action_vector_name]
+                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
                 elif action_list[0] == "bc":  # "bc {pos.x} {pos.y}"
                     x, y = int(action_list[1]), int(action_list[2])
                     unit_name = f"ct_{y + shift}_{x + shift}"
                     action_vector_name = "ct_build_cart"
-                    actions_dict["city_tiles"][unit_name] = action_vector[action_vector_name]
+                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
                 elif action_list[0] == "idle":  # "idle {pos.x} {pos.y}"
                     x, y = int(action_list[1]), int(action_list[2])
                     unit_name = f"ct_{y + shift}_{x + shift}"
                     action_vector_name = "ct_idle"
-                    actions_dict["city_tiles"][unit_name] = action_vector[action_vector_name]
+                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
                 else:
                     raise ValueError
             return actions_dict
