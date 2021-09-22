@@ -6,7 +6,7 @@ import tensorflow as tf
 # import reverb
 
 from lux_ai import models, tools, tfrecords_storage
-from lux_gym.envs.lux.action_vectors import action_vector  # , worker_action_mask
+from lux_gym.envs.lux.action_vectors import actions_number  # , worker_action_mask
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -22,9 +22,9 @@ class Agent(abc.ABC):
         # self._lambda = config["lambda"]
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
-        self._actions_shape = self._actions_number = len(action_vector)
+        self._actions_shape = actions_number
         if config["model_name"] == "actor_critic_custom":
-            self._model = models.actor_critic_base()
+            self._model = models.actor_critic_base(self._actions_shape)
             # launch a model once to define structure
             dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
             dummy_feature_maps[16, 16, :1] = 1
@@ -36,13 +36,12 @@ class Agent(abc.ABC):
         else:
             raise ValueError
 
-        # class_weights = np.ones(self._actions_shape, dtype=np.single)
-        # class_weights[3] = 0.1
-        # class_weights[8] = 0.3
-        # class_weights[22] = 2.
-        # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
-        # self._class_weights = tf.expand_dims(class_weights, axis=0)
-        # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
+        class_weights = np.ones(self._actions_shape, dtype=np.single)
+        class_weights[4] = 0.1
+        class_weights[5] = 2.
+        class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+        self._class_weights = tf.expand_dims(class_weights, axis=0)
+        self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -111,29 +110,28 @@ class Agent(abc.ABC):
                                                                "data/tfrecords/imitator/train/")
         ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/validation/")
-        ds_train = ds_train.map(lambda x1, x2, x3, x4: ((tf.cast(x1, dtype=tf.float32),
-                                                         tf.cast(x2, dtype=tf.float32)),
-                                                        (tf.cast(x3, dtype=tf.float32),
-                                                         tf.cast(x4, dtype=tf.float32))
-                                                        )
+        ds_train = ds_train.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
+                                                    (tf.cast(x2, dtype=tf.float32),
+                                                     tf.cast(x3, dtype=tf.float32))
+                                                    )
                                 )
-        ds_valid = ds_valid.map(lambda x1, x2, x3, x4: ((tf.cast(x1, dtype=tf.float32),
-                                                         tf.cast(x2, dtype=tf.float32)),
-                                                        (tf.cast(x3, dtype=tf.float32),
-                                                         tf.cast(x4, dtype=tf.float32))
-                                                        )
+        ds_valid = ds_valid.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
+                                                    (tf.cast(x2, dtype=tf.float32),
+                                                     tf.cast(x3, dtype=tf.float32))
+                                                    )
                                 )
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        for sample in ds_valid.take(10):
-            observations = sample[0][0].numpy()
-            actions_masks = sample[0][1].numpy()
-            actions_probs = sample[1][0].numpy()
-            total_rewards = sample[1][1].numpy()
-            probs_output, value_output = self._model((observations, actions_masks))
-            probs_output_v = probs_output.numpy()
-            value_output_v = value_output.numpy()
+        # for sample in ds_valid.take(10):
+        #     observations = sample[0].numpy()
+        #     # observations = sample[0][0].numpy()
+        #     # actions_masks = sample[0][1].numpy()
+        #     actions_probs = sample[1][0].numpy()
+        #     total_rewards = sample[1][1].numpy()
+        #     probs_output, value_output = self._model(observations)
+        #     probs_output_v = probs_output.numpy()
+        #     value_output_v = value_output.numpy()
         #     skewed_loss = self._loss_function(sample[1][0], probs_output)
         #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
@@ -143,9 +141,9 @@ class Agent(abc.ABC):
         )
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-6),  # , clipnorm=4.),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),  # , clipnorm=4.),
             loss={
-                "output_1": tf.keras.losses.KLDivergence(),
+                "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
             },
             metrics={
@@ -157,7 +155,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=10, validation_data=ds_valid, callbacks=[early_stop_callback])
+        self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback])
         weights = self._model.get_weights()
         data = {
             'weights': weights,

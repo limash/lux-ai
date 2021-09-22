@@ -413,7 +413,7 @@ def actor_critic_squeeze():
     return model
 
 
-def actor_critic_base():
+def actor_critic_base(actions_shape):
     import tensorflow as tf
     import tensorflow.keras as keras
 
@@ -436,7 +436,7 @@ def actor_critic_base():
             return [batch, x, y, self._filters]
 
     class ResidualModel(keras.Model):
-        def __init__(self, **kwargs):
+        def __init__(self, actions_number, **kwargs):
             super().__init__(**kwargs)
 
             filters = 128
@@ -454,18 +454,20 @@ def actor_critic_base():
             self._depthwise = keras.layers.DepthwiseConv2D(32)
             self._flatten = keras.layers.Flatten()
 
-            self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-            self._city_tiles_probs1 = keras.layers.Dense(4, activation="softmax", kernel_initializer=initializer_random)
+            # self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+            # self._city_tiles_probs1 = keras.layers.Dense(4, activation="softmax",
+            #                                              kernel_initializer=initializer_random)
             self._workers_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-            self._workers_probs1 = keras.layers.Dense(19, activation="softmax", kernel_initializer=initializer_random)
-            self._carts_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-            self._carts_probs1 = keras.layers.Dense(17, activation="softmax", kernel_initializer=initializer_random)
+            self._workers_probs1 = keras.layers.Dense(actions_number, activation="softmax",
+                                                      kernel_initializer=initializer_random)
+            # self._carts_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+            # self._carts_probs1 = keras.layers.Dense(17, activation="softmax", kernel_initializer=initializer_random)
 
             self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
                                                 activation=keras.activations.tanh)
 
         def call(self, inputs, training=False, mask=None):
-            features, actions_mask = inputs
+            features = inputs
 
             x = features
 
@@ -488,14 +490,15 @@ def actor_critic_base():
             z2 = self._flatten(z2)
             z = tf.concat([z1, z2], axis=1)
 
-            t = self._city_tiles_probs0(z)
-            t = self._city_tiles_probs1(t)
+            # t = self._city_tiles_probs0(z)
+            # t = self._city_tiles_probs1(t)
             w = self._workers_probs0(z)
             w = self._workers_probs1(w)
-            c = self._carts_probs0(z)
-            c = self._carts_probs1(c)
-            probs = tf.concat([t, w, c], axis=1)
-            probs = probs * actions_mask
+            # c = self._carts_probs0(z)
+            # c = self._carts_probs1(c)
+            # probs = tf.concat([t, w, c], axis=1)
+            # probs = probs * actions_mask
+            probs = w
 
             baseline = self._baseline(tf.concat([y, z], axis=1))
 
@@ -504,5 +507,5 @@ def actor_critic_base():
         def get_config(self):
             pass
 
-    model = ResidualModel()
+    model = ResidualModel(actions_shape)
     return model

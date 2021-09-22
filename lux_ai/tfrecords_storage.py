@@ -148,7 +148,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     def read_tfrecord(example):
         features = {
             "observation": tf.io.FixedLenFeature([], tf.string),
-            "action_mask": tf.io.FixedLenFeature([], tf.string),
+            # "action_mask": tf.io.FixedLenFeature([], tf.string),
             "action_probs": tf.io.FixedLenFeature([], tf.string),
             "reward": tf.io.FixedLenFeature([], tf.float32),
         }
@@ -162,21 +162,21 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
         observation = tf.sparse.to_dense(observation)
         observation = tf.squeeze(observation)
         observation.set_shape(feature_maps_shape)
-        action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
-        action_mask.set_shape(actions_shape)
+        # action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
+        # action_mask.set_shape(actions_shape)
         action_probs = tf.io.parse_tensor(example["action_probs"], tf.float16)
         action_probs.set_shape(actions_shape)
         reward = example["reward"]
         reward.set_shape(())
 
-        return observation, action_mask, action_probs, reward
+        return observation, action_probs, reward
 
     option_no_order = tf.data.Options()
     option_no_order.experimental_deterministic = False
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    # filenames_ds = filenames_ds.with_options(option_no_order)
+    filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    # ds = ds.shuffle(1000)
+    ds = ds.shuffle(1000)
     return ds
