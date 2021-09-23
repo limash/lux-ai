@@ -467,7 +467,8 @@ def actor_critic_base(actions_shape):
                                                 activation=keras.activations.tanh)
 
         def call(self, inputs, training=False, mask=None):
-            features = inputs
+            # features = inputs
+            features = tf.concat([inputs[:, :, :, :36], inputs[:, :, :, 37:38], inputs[:, :, :, 39:]], axis=-1)
 
             x = features
 
