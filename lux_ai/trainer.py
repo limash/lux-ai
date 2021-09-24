@@ -155,7 +155,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback])
+        self._model.fit(ds_train, epochs=3, validation_data=ds_valid, callbacks=[early_stop_callback])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
