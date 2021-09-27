@@ -110,20 +110,21 @@ class Agent(abc.ABC):
                                                                "data/tfrecords/imitator/train/")
         ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/validation/")
-        ds_train = ds_train.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
-                                                    (tf.cast(x2, dtype=tf.float32),
-                                                     tf.cast(x3, dtype=tf.float32))
-                                                    )
-                                )
-        ds_valid = ds_valid.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
-                                                    (tf.cast(x2, dtype=tf.float32),
-                                                     tf.cast(x3, dtype=tf.float32))
-                                                    )
-                                )
+        # ds_train = ds_train.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
+        #                                             (tf.cast(x2, dtype=tf.float32),
+        #                                              tf.cast(x3, dtype=tf.float32))
+        #                                             )
+        #                         )
+        # ds_valid = ds_valid.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
+        #                                             (tf.cast(x2, dtype=tf.float32),
+        #                                              tf.cast(x3, dtype=tf.float32))
+        #                                             )
+        #                         )
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in ds_valid.take(10):
+        #     # tfrecords_storage.random_reverse(sample)
         #     observations = sample[0].numpy()
         #     # observations = sample[0][0].numpy()
         #     # actions_masks = sample[0][1].numpy()
@@ -135,9 +136,11 @@ class Agent(abc.ABC):
         #     skewed_loss = self._loss_function(sample[1][0], probs_output)
         #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
+        lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=2)
         early_stop_callback = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=2
+            patience=4,
+            restore_best_weights=True,
         )
 
         self._model.compile(
@@ -155,7 +158,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=3, validation_data=ds_valid, callbacks=[early_stop_callback])
+        self._model.fit(ds_train, epochs=20, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
         weights = self._model.get_weights()
         data = {
             'weights': weights,

@@ -140,6 +140,43 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
     write_tfrecord(dataset, record_number, record_name)
 
 
+def up_down(obs, probs):
+    obs_out = tf.reverse(obs, [0])
+    if probs[0] == 1:
+        probs_out = tf.constant([0, 0, 1, 0, 0, 0], dtype=tf.float32)
+    elif probs[2] == 1:
+        probs_out = tf.constant([1, 0, 0, 0, 0, 0], dtype=tf.float32)
+    else:
+        probs_out = probs
+    return obs_out, probs_out
+
+
+def left_right(obs, probs):
+    obs_out = tf.reverse(obs, [1])
+    if probs[1] == 1:
+        probs_out = tf.constant([0, 0, 0, 1, 0, 0], dtype=tf.float32)
+    elif probs[3] == 1:
+        probs_out = tf.constant([0, 1, 0, 0, 0, 0], dtype=tf.float32)
+    else:
+        probs_out = probs
+    return obs_out, probs_out
+
+
+def random_reverse(observations, actions_probs, total_rewards):
+    observations = tf.cast(observations, dtype=tf.float32)
+    actions_probs = tf.cast(actions_probs, dtype=tf.float32)
+    total_rewards = tf.cast(total_rewards, dtype=tf.float32)
+    trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
+    if trigger == 1:
+        observations, actions_probs = up_down(observations, actions_probs)
+    elif trigger == 2:
+        observations, actions_probs = left_right(observations, actions_probs)
+    elif trigger == 3:
+        observations, actions_probs = up_down(observations, actions_probs)
+        observations, actions_probs = left_right(observations, actions_probs)
+    return observations, (actions_probs, total_rewards)
+
+
 def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
@@ -178,5 +215,6 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     ds = ds.shuffle(1000)
     return ds
