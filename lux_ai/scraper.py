@@ -196,64 +196,81 @@ class Agent(abc.ABC):
         for step in range(0, configuration.episodeSteps):
             assert observations[0]["updates"] == observations[1]["updates"] == data["steps"][step][0]["observation"][
                 "updates"]
-            # get units to know their types etc.
-            player1 = current_game_states[0].players[observations[0].player]
-            player1_units_dict_active = {}
-            player1_units_dict_all = {}
-            player2 = current_game_states[1].players[(observations[0].player + 1) % 2]
-            player2_units_dict_active = {}
-            player2_units_dict_all = {}
-            for unit in player1.units:
-                player1_units_dict_all[unit.id] = unit
-                if unit.can_act():
-                    player1_units_dict_active[unit.id] = unit
-            for unit in player2.units:
-                player2_units_dict_all[unit.id] = unit
-                if unit.can_act():
-                    player2_units_dict_active[unit.id] = unit
-            # get citytiles
-            player1_ct_list_active = []
-            for city in player1.cities.values():
-                for citytile in city.citytiles:
-                    if citytile.cooldown < 1:
-                        x_coord, y_coord = citytile.pos.x, citytile.pos.y
-                        player1_ct_list_active.append([x_coord, y_coord])
-            player2_ct_list_active = []
-            for city in player2.cities.values():
-                for citytile in city.citytiles:
-                    if citytile.cooldown < 1:
-                        x_coord, y_coord = citytile.pos.x, citytile.pos.y
-                        player2_ct_list_active.append([x_coord, y_coord])
             # get actions from a record, action for the current obs is in the next step of data
             actions_1 = data["steps"][step + 1][0]["action"]
             actions_2 = data["steps"][step + 1][1]["action"]
-            # copy actions since they we need preprocess them before recording
-            if actions_1 is None:
-                actions_1_vec = []
-            else:
-                actions_1_vec = actions_1.copy()
-            if actions_2 is None:
-                actions_2_vec = []
-            else:
-                actions_2_vec = actions_2.copy()
-
-            # check actions and erase invalid ones
-            actions_1_vec = check_actions(actions_1_vec, player1_units_dict_active, player1_ct_list_active)
-            actions_2_vec = check_actions(actions_2_vec, player2_units_dict_active, player2_ct_list_active)
-            # if no action and unit can act, add "m {id} c"
-            actions_1_vec = update_units_actions(actions_1_vec, player1_units_dict_active)
-            actions_2_vec = update_units_actions(actions_2_vec, player2_units_dict_active)
-            # in no action and ct can act, add "idle {x} {y}"
-            actions_1_vec = update_cts_actions(actions_1_vec, player1_ct_list_active)
-            actions_2_vec = update_cts_actions(actions_2_vec, player2_ct_list_active)
-
-            # get actions vector representation
-            actions_1_dict = get_actions_dict(actions_1_vec, player1_units_dict_active, player1_units_dict_all)
-            actions_2_dict = get_actions_dict(actions_2_vec, player2_units_dict_active, player2_units_dict_all)
-
-            # probs are similar to actions
-            player1_data = tools.add_point(player1_data, actions_1_dict, actions_1_dict, proc_obsns[0], step)
-            player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_dict, proc_obsns[1], step)
+            if team_of_interest == 1 or team_of_interest == -1:
+                # get units to know their types etc.
+                player1 = current_game_states[0].players[observations[0].player]
+                player1_units_dict_active = {}
+                player1_units_dict_all = {}
+                for unit in player1.units:
+                    player1_units_dict_all[unit.id] = unit
+                    if unit.can_act():
+                        player1_units_dict_active[unit.id] = unit
+                # get citytiles
+                player1_ct_list_active = []
+                for city in player1.cities.values():
+                    for citytile in city.citytiles:
+                        if citytile.cooldown < 1:
+                            x_coord, y_coord = citytile.pos.x, citytile.pos.y
+                            player1_ct_list_active.append([x_coord, y_coord])
+                # copy actions since we need preprocess them before recording
+                if actions_1 is None:
+                    actions_1_vec = []
+                else:
+                    actions_1_vec = actions_1.copy()
+                # check actions and erase invalid ones
+                actions_1_vec = check_actions(actions_1_vec, player1_units_dict_active, player1_ct_list_active)
+                # if no action and unit can act, add "m {id} c"
+                actions_1_vec = update_units_actions(actions_1_vec, player1_units_dict_active)
+                # in no action and ct can act, add "idle {x} {y}"
+                # actions_1_vec = update_cts_actions(actions_1_vec, player1_ct_list_active)
+                # get actions vector representation
+                actions_1_dict = get_actions_dict(actions_1_vec, player1_units_dict_active, player1_units_dict_all)
+                # process only workers data
+                actions_1_dict.pop("carts")
+                actions_1_dict.pop("city_tiles")
+                proc_obsns[0].pop("carts")
+                proc_obsns[0].pop("city_tiles")
+                # probs are similar to actions
+                player1_data = tools.add_point(player1_data, actions_1_dict, actions_1_dict, proc_obsns[0], step)
+            if team_of_interest == 2 or team_of_interest == -1:
+                # get units to know their types etc.
+                player2 = current_game_states[1].players[(observations[0].player + 1) % 2]
+                player2_units_dict_active = {}
+                player2_units_dict_all = {}
+                for unit in player2.units:
+                    player2_units_dict_all[unit.id] = unit
+                    if unit.can_act():
+                        player2_units_dict_active[unit.id] = unit
+                # get citytiles
+                player2_ct_list_active = []
+                for city in player2.cities.values():
+                    for citytile in city.citytiles:
+                        if citytile.cooldown < 1:
+                            x_coord, y_coord = citytile.pos.x, citytile.pos.y
+                            player2_ct_list_active.append([x_coord, y_coord])
+                # copy actions since we need preprocess them before recording
+                if actions_2 is None:
+                    actions_2_vec = []
+                else:
+                    actions_2_vec = actions_2.copy()
+                # check actions and erase invalid ones
+                actions_2_vec = check_actions(actions_2_vec, player2_units_dict_active, player2_ct_list_active)
+                # if no action and unit can act, add "m {id} c"
+                actions_2_vec = update_units_actions(actions_2_vec, player2_units_dict_active)
+                # in no action and ct can act, add "idle {x} {y}"
+                # actions_2_vec = update_cts_actions(actions_2_vec, player2_ct_list_active)
+                # get actions vector representation
+                actions_2_dict = get_actions_dict(actions_2_vec, player2_units_dict_active, player2_units_dict_all)
+                # process only workers data
+                actions_2_dict.pop("carts")
+                actions_2_dict.pop("city_tiles")
+                proc_obsns[1].pop("carts")
+                proc_obsns[1].pop("city_tiles")
+                # probs are similar to actions
+                player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_dict, proc_obsns[1], step)
 
             dones, observations, proc_obsns = environment.step_process((actions_1, actions_2))
             current_game_states = environment.game_states
