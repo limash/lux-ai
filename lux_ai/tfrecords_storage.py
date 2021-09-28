@@ -64,6 +64,8 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                 for point in unit.data:
                     # point [action, action_probs, observation]
                     action = point[0]
+                    if action[4] == 1. and random.random() > 0.05:
+                        continue
                     # store observation, action_probs, reward
                     observation = tf.sparse.from_dense(tf.constant(point[2], dtype=tf.float16))
                     actions_probs = tf.constant(point[1], dtype=tf.float16)
@@ -124,7 +126,7 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
 
     # result = []
     # generator = data_gen_all()
-    # while len(result) < 10:
+    # while len(result) < 1000:
     #     x = next(generator)
     #     result.append(x)
 
