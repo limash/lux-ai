@@ -37,8 +37,8 @@ class Agent(abc.ABC):
             raise ValueError
 
         class_weights = np.ones(self._actions_shape, dtype=np.single)
-        class_weights[4] = 0.1
-        class_weights[5] = 2.
+        class_weights[4] = 0.05
+        # class_weights[5] = 2.
         class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
         self._class_weights = tf.expand_dims(class_weights, axis=0)
         self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
