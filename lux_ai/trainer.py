@@ -36,12 +36,12 @@ class Agent(abc.ABC):
         else:
             raise ValueError
 
-        class_weights = np.ones(self._actions_shape, dtype=np.single)
-        class_weights[4] = 0.05
-        # class_weights[5] = 2.
-        class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
-        self._class_weights = tf.expand_dims(class_weights, axis=0)
-        self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
+        # class_weights = np.ones(self._actions_shape, dtype=np.single)
+        # class_weights[4] = 0.05
+        # # class_weights[5] = 2.
+        # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+        # self._class_weights = tf.expand_dims(class_weights, axis=0)
+        # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -146,7 +146,7 @@ class Agent(abc.ABC):
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),  # , clipnorm=4.),
             loss={
-                "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
+                "output_1": tf.keras.losses.KLDivergence(),  # self._loss_function,
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
             },
             metrics={
@@ -158,7 +158,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=20, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
+        self._model.fit(ds_train, epochs=10, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
