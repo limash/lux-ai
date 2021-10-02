@@ -31,6 +31,7 @@ class Agent(abc.ABC):
             # dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
             #                tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
             dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
+            dummy_input, (_, _) = tools.squeeze_transform(dummy_input, (None, None))
             dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
             self._model(dummy_input)
         else:
@@ -110,24 +111,13 @@ class Agent(abc.ABC):
                                                                "data/tfrecords/imitator/train/")
         ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/validation/")
-        # ds_train = ds_train.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
-        #                                             (tf.cast(x2, dtype=tf.float32),
-        #                                              tf.cast(x3, dtype=tf.float32))
-        #                                             )
-        #                         )
-        # ds_valid = ds_valid.map(lambda x1, x2, x3: (tf.cast(x1, dtype=tf.float32),
-        #                                             (tf.cast(x2, dtype=tf.float32),
-        #                                              tf.cast(x3, dtype=tf.float32))
-        #                                             )
-        #                         )
+        ds_train = ds_train.map(tools.squeeze_transform)
+        ds_valid = ds_valid.map(tools.squeeze_transform)
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in ds_valid.take(10):
-        #     # tfrecords_storage.random_reverse(sample)
         #     observations = sample[0].numpy()
-        #     # observations = sample[0][0].numpy()
-        #     # actions_masks = sample[0][1].numpy()
         #     actions_probs = sample[1][0].numpy()
         #     total_rewards = sample[1][1].numpy()
         #     probs_output, value_output = self._model(observations)
@@ -144,7 +134,7 @@ class Agent(abc.ABC):
         )
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),  # , clipnorm=4.),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),  # , clipnorm=4.),
             loss={
                 "output_1": tf.keras.losses.KLDivergence(),  # self._loss_function,
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
