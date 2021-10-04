@@ -23,7 +23,7 @@ class Agent(abc.ABC):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = actions_number
-        if config["model_name"] == "actor_critic_custom":
+        if config["model_name"] == "actor_critic_base":
             self._model = models.actor_critic_base(self._actions_shape)
             # launch a model once to define structure
             dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
@@ -117,6 +117,7 @@ class Agent(abc.ABC):
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in ds_valid.take(10):
+        #     sample = tools.squeeze_transform(*sample)
         #     observations = sample[0].numpy()
         #     actions_probs = sample[1][0].numpy()
         #     total_rewards = sample[1][1].numpy()
