@@ -11,6 +11,7 @@ import gym
 from lux_ai import tools, tfrecords_storage
 # from lux_ai.dm_reverb_storage import send_data
 from lux_gym.envs.lux.action_vectors import action_vector, action_vector_ct, actions_number
+import lux_gym.envs.tools as env_tools
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -272,8 +273,17 @@ class Agent(abc.ABC):
                 # probs are similar to actions
                 player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_dict, proc_obsns[1], step)
 
-            dones, observations, proc_obsns = environment.step_process((actions_1, actions_2))
+            # dones, observations, proc_obsns = environment.step_process((actions_1, actions_2))
+            dones, (obs1, obs2) = environment.step((actions_1, actions_2))
+            observations = (obs1, obs2)
             current_game_states = environment.game_states
+
+            first_player_obs, second_player_obs = None, None
+            if team_of_interest == 1 or team_of_interest == -1:
+                first_player_obs = env_tools.get_separate_outputs(obs1, current_game_states[0])
+            if team_of_interest == 2 or team_of_interest == -1:
+                second_player_obs = env_tools.get_separate_outputs(obs2, current_game_states[1])
+            proc_obsns = (first_player_obs, second_player_obs)
 
             if any(dones):
                 break
