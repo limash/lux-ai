@@ -64,8 +64,8 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                 for point in unit.data:
                     # point [action, action_probs, observation]
                     action = point[0]
-                    if action[4] == 1. and random.random() > 0.05:
-                        continue
+                    # if action[4] == 1. and random.random() > 0.05:
+                    #     continue
                     # store observation, action_probs, reward
                     observation = tf.sparse.from_dense(tf.constant(point[2], dtype=tf.float16))
                     actions_probs = tf.constant(point[1], dtype=tf.float16)
@@ -179,6 +179,13 @@ def random_reverse(observations, actions_probs, total_rewards):
     return observations, (actions_probs, total_rewards)
 
 
+def rearrange(observations, actions_probs, total_rewards):
+    observations = tf.cast(observations, dtype=tf.float32)
+    actions_probs = tf.cast(actions_probs, dtype=tf.float32)
+    total_rewards = tf.cast(total_rewards, dtype=tf.float32)
+    return observations, (actions_probs, total_rewards)
+
+
 def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
@@ -218,5 +225,6 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
-    ds = ds.shuffle(1000)
+    # ds = ds.map(rearrange, num_parallel_calls=AUTO)
+    ds = ds.shuffle(10000)
     return ds
