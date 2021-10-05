@@ -127,10 +127,10 @@ class Agent(abc.ABC):
         #     skewed_loss = self._loss_function(sample[1][0], probs_output)
         #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
-        lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=2)
+        lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
         early_stop_callback = tf.keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=4,
+            patience=2,
             restore_best_weights=True,
         )
 
@@ -149,7 +149,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
+        self._model.fit(ds_train, epochs=4, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
