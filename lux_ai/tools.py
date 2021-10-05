@@ -4,6 +4,8 @@ from tensorflow.keras import backend
 import ray
 import gym
 
+from lux_gym.envs import tools
+
 
 # from lux_gym.envs.lux.action_vectors import worker_action_mask, cart_action_mask, citytile_action_mask
 
@@ -12,49 +14,7 @@ import gym
 
 def squeeze_transform(obs_base, acts_rews):
     actions_probs, total_rewards = acts_rews
-    features = obs_base
-    # features_v = features.numpy()
-
-    features_padded = tf.pad(features, tf.constant([[6, 6], [6, 6], [0, 0]]), mode="CONSTANT")
-    # features_padded_v = features_padded.numpy()
-    units_layers = features_padded[:, :, :1]
-    units_coords = tf.cast(tf.where(units_layers), dtype=tf.int32)
-    min_x = units_coords[:, 0] - 6
-    max_x = units_coords[:, 0] + 6
-    min_y = units_coords[:, 1] - 6
-    max_y = units_coords[:, 1] + 6
-    piece = features_padded[min_x[0]: max_x[0] + 1, min_y[0]: max_y[0] + 1, :]
-    # piece_v = piece.numpy()
-
-    features_padded_glob = tf.pad(features,
-                                  tf.constant([[32, 32], [32, 32], [0, 0]]),
-                                  mode="CONSTANT")
-    # features_padded_glob_v = features_padded_glob.numpy()
-    units_layers_glob = features_padded_glob[:, :, :1]
-    units_coords_glob = tf.cast(tf.where(units_layers_glob), dtype=tf.int32)
-    min_x_glob = units_coords_glob[:, 0] - 32
-    max_x_glob = units_coords_glob[:, 0] + 32
-    min_y_glob = units_coords_glob[:, 1] - 32
-    max_y_glob = units_coords_glob[:, 1] + 32
-
-    piece_glob1 = features_padded_glob[min_x_glob[0]: max_x_glob[0] + 1, min_y_glob[0]: max_y_glob[0] + 1, 6:9]
-    piece_glob2 = features_padded_glob[min_x_glob[0]: max_x_glob[0] + 1, min_y_glob[0]: max_y_glob[0] + 1, 15:17]
-    piece_glob3 = features_padded_glob[min_x_glob[0]: max_x_glob[0] + 1, min_y_glob[0]: max_y_glob[0] + 1, 24:27]
-    piece_glob4 = features_padded_glob[min_x_glob[0]: max_x_glob[0] + 1, min_y_glob[0]: max_y_glob[0] + 1, 45:49]
-    piece_glob5 = features_padded_glob[min_x_glob[0]: max_x_glob[0] + 1, min_y_glob[0]: max_y_glob[0] + 1, 60:]
-    piece_glob = tf.concat([piece_glob1, piece_glob2, piece_glob3, piece_glob4, piece_glob5], axis=-1)
-    # 17, 4; 5, 5
-    pooled_piece_glob = tf.squeeze(tf.nn.avg_pool(tf.expand_dims(piece_glob, axis=0), 5, 5, padding="VALID"))
-    # piece_glob_v = piece_glob.numpy()
-    # pooled_piece_glob_v = pooled_piece_glob.numpy()
-
-    piece_filtered = tf.concat([piece[:, :, :1],
-                                piece[:, :, 4:10],
-                                piece[:, :, 15:50],
-                                piece[:, :, 60:],
-                                ], axis=-1)
-    # piece_filtered_v = piece_filtered.numpy()
-    observations = tf.concat([piece_filtered, pooled_piece_glob], axis=-1)
+    observations = tools.squeeze(obs_base)
     return observations, (actions_probs, total_rewards)
 
 
