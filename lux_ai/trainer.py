@@ -27,11 +27,12 @@ class Agent(abc.ABC):
             self._model = models.actor_critic_base(self._actions_shape)
             # launch a model once to define structure
             dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
-            dummy_feature_maps[16, 16, :1] = 1
+            # dummy_feature_maps[16, 16, :1] = 1
+            dummy_feature_maps[6, 6, :1] = 1
             # dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
             #                tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
             dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
-            dummy_input, (_, _) = tools.squeeze_transform(dummy_input, (None, None))
+            # dummy_input, (_, _) = tools.squeeze_transform(dummy_input, (None, None))
             dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
             self._model(dummy_input)
         else:
@@ -111,8 +112,8 @@ class Agent(abc.ABC):
                                                                "data/tfrecords/imitator/train/")
         ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/validation/")
-        ds_train = ds_train.map(tools.squeeze_transform)
-        ds_valid = ds_valid.map(tools.squeeze_transform)
+        # ds_train = ds_train.map(tools.squeeze_transform)
+        # ds_valid = ds_valid.map(tools.squeeze_transform)
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
@@ -135,7 +136,7 @@ class Agent(abc.ABC):
         )
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),  # , clipnorm=4.),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),  # , clipnorm=4.),
             loss={
                 "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
@@ -149,7 +150,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=4, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
+        self._model.fit(ds_train, epochs=10, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
