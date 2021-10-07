@@ -446,7 +446,7 @@ def actor_critic_base(actions_shape):
         def __init__(self, actions_number, **kwargs):
             super().__init__(**kwargs)
 
-            filters = 64
+            filters = 128
             layers = 12
 
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
