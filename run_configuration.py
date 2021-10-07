@@ -1,13 +1,14 @@
 CONF_ActorCritic = {
     "environment": "lux_gym:lux-v0",
-    "setup": "single",
+    "setup": "scrape",
     # "lambda": 0.8,
-    "saved_policies": ["ilia_rb"],
+    # "saved_policies": ["ilia_rb"],
     "model_name": "actor_critic_base",
 }
 
 CONF_Scraper = {
     "lux_version": "3.1.0",
+    "scrape_type": "multi",
     "team_name": "Toad Brigade",
     "only_wins": False,
 }
