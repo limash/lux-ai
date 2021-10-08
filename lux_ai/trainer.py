@@ -136,7 +136,7 @@ class Agent(abc.ABC):
         )
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),  # , clipnorm=4.),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),  # , clipnorm=4.),
             loss={
                 "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
@@ -150,7 +150,7 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=10, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
+        self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
