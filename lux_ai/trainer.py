@@ -23,8 +23,8 @@ class Agent(abc.ABC):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = actions_number
-        if config["model_name"] == "actor_critic_base":
-            self._model = models.actor_critic_base(self._actions_shape)
+        if config["model_name"] == "actor_critic_residual":
+            self._model = models.actor_critic_residual(self._actions_shape)
             # launch a model once to define structure
             dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
             # dummy_feature_maps[16, 16, :1] = 1
