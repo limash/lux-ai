@@ -3,7 +3,7 @@ CONF_ActorCritic = {
     "setup": "imitate",
     # "lambda": 0.8,
     # "saved_policies": ["ilia_rb"],
-    "model_name": "actor_critic_residual",
+    "model_name": "actor_critic_efficient",
 }
 
 CONF_Scraper = {

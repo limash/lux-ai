@@ -25,18 +25,21 @@ class Agent(abc.ABC):
         self._actions_shape = actions_number
         if config["model_name"] == "actor_critic_residual":
             self._model = models.actor_critic_residual(self._actions_shape)
-            # launch a model once to define structure
-            dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
-            # dummy_feature_maps[16, 16, :1] = 1
-            dummy_feature_maps[6, 6, :1] = 1
-            # dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
-            #                tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
-            dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
-            # dummy_input, (_, _) = tools.squeeze_transform(dummy_input, (None, None))
-            dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
-            self._model(dummy_input)
+        elif config["model_name"] == "actor_critic_efficient":
+            self._model = models.actor_critic_efficient(self._actions_shape)
         else:
             raise ValueError
+
+        # launch a model once to define structure
+        dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
+        # dummy_feature_maps[16, 16, :1] = 1
+        dummy_feature_maps[6, 6, :1] = 1
+        # dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
+        #                tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
+        dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
+        # dummy_input, (_, _) = tools.squeeze_transform(dummy_input, (None, None))
+        dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
+        self._model(dummy_input)
 
         class_weights = np.ones(self._actions_shape, dtype=np.single)
         class_weights[4] = 0.1
