@@ -5,5 +5,7 @@ setup(name='lux_ai',
       install_requires=['gym',
                         'kaggle-environments',
                         'numpy',
-                        'tensorflow']
+                        'tensorflow',
+                        'ray',
+                        ]
       )

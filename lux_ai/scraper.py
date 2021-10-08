@@ -18,6 +18,308 @@ if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
+def scrape(env_name, data, team_name=None, only_wins=False):
+    """
+    Collects trajectories from an episode to the buffer.
+
+    A buffer contains items, each item consists of several n_points;
+    One n_point contains (action, action_probs, action_mask, observation,
+                          total reward, temporal_mask, progress);
+    action is a response for the current observation,
+    reward, done are for the current observation.
+    """
+    if team_name:
+        if data["info"]["TeamNames"][0] == team_name:
+            team_of_interest = 1
+        elif data["info"]["TeamNames"][1] == team_name:
+            team_of_interest = 2
+        else:
+            return (None, None), (None, None), None
+    else:
+        team_of_interest = -1
+
+    player1_data = {}
+    player2_data = {}
+
+    environment = gym.make(env_name, seed=data["configuration"]["seed"])
+    observations, proc_obsns = environment.reset_process()
+    configuration = environment.configuration
+    current_game_states = environment.game_states
+    width, height = current_game_states[0].map.width, current_game_states[0].map.height
+    shift = int((32 - width) / 2)  # to make all feature maps 32x32
+
+    def check_actions(actions, player_units_dict, player_cts_list):
+        new_actions = []
+        for action in actions:
+            action_list = action.split(" ")
+            if action_list[0] not in ["r", "bw", "bc"]:
+                if action_list[1] in player_units_dict.keys():
+                    new_actions.append(action)
+            else:
+                x, y = action_list[1], action_list[2]
+                if [int(x), int(y)] in player_cts_list:
+                    new_actions.append(action)
+        return new_actions
+
+    def update_units_actions(actions, player_units_dict):
+        units_with_actions = []
+        for action in actions:
+            action_list = action.split(" ")
+            if action_list[0] not in ["r", "bw", "bc"]:
+                units_with_actions.append(action_list[1])
+        for key in player_units_dict.keys():
+            if key not in units_with_actions:
+                actions.append(f"m {key} c")
+        return actions
+
+    def update_cts_actions(actions, player_cts_list):
+        units_with_actions = []
+        for action in actions:
+            action_list = action.split(" ")
+            if action_list[0] in ["r", "bw", "bc"]:
+                x, y = int(action_list[1]), int(action_list[2])
+                units_with_actions.append([x, y])
+        for ct in player_cts_list:
+            if ct not in units_with_actions:
+                actions.append(f"idle {ct[0]} {ct[1]}")
+        return actions
+
+    def get_actions_dict(player_actions, player_units_dict_active, player_units_dict_all):
+        actions_dict = {"workers": {}, "carts": {}, "city_tiles": {}}
+        for action in player_actions:
+            action_list = action.split(" ")
+            # units
+            if action_list[0] == "m":  # "m {id} {direction}"
+                unit_name = action_list[1]  # "{id}"
+                direction = action_list[2]
+                try:
+                    unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
+                except KeyError:  # it occurs when there is not valid action proposed
+                    continue
+                action_vector_name = f"{unit_type}_m{direction}"  # "{unit_type}_m{direction}"
+                if unit_type == "w":
+                    actions_dict["workers"][unit_name] = action_vector[action_vector_name]
+                else:
+                    actions_dict["carts"][unit_name] = action_vector[action_vector_name]
+            elif action_list[0] == "t":  # "t {id} {dest_id} {resourceType} {amount}"
+                unit_name = action_list[1]
+                dest_name = action_list[2]
+                resourceType = action_list[3]
+                try:
+                    unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
+                except KeyError:  # these is no such active unit to take action
+                    continue
+                action_vector_name = f"{unit_type}_mc"  # REPLACEMENT
+                # try:
+                #     direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
+                #                                                                          dest_name].pos)
+                #     action_vector_name = f"{unit_type}_t{direction}{resourceType}"
+                # except KeyError:  # there is no such destination unit
+                #     action_vector_name = f"{unit_type}_mc"
+                if unit_type == "w":
+                    actions_dict["workers"][unit_name] = action_vector[action_vector_name]
+                else:
+                    actions_dict["carts"][unit_name] = action_vector[action_vector_name]
+            elif action_list[0] == "bcity":  # "bcity {id}"
+                unit_name = action_list[1]
+                action_vector_name = "w_build"
+                actions_dict["workers"][unit_name] = action_vector[action_vector_name]
+            elif action_list[0] == "p":  # "p {id}"
+                unit_name = action_list[1]
+                # action_vector_name = "w_pillage"
+                action_vector_name = "w_mc"  # REPLACEMENT
+                actions_dict["workers"][unit_name] = action_vector[action_vector_name]
+            # city tiles
+            elif action_list[0] == "r":  # "r {pos.x} {pos.y}"
+                x, y = int(action_list[1]), int(action_list[2])
+                unit_name = f"ct_{y + shift}_{x + shift}"
+                action_vector_name = "ct_research"
+                actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
+            elif action_list[0] == "bw":  # "bw {pos.x} {pos.y}"
+                x, y = int(action_list[1]), int(action_list[2])
+                unit_name = f"ct_{y + shift}_{x + shift}"
+                action_vector_name = "ct_build_worker"
+                actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
+            elif action_list[0] == "bc":  # "bc {pos.x} {pos.y}"
+                x, y = int(action_list[1]), int(action_list[2])
+                unit_name = f"ct_{y + shift}_{x + shift}"
+                action_vector_name = "ct_build_cart"
+                actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
+            elif action_list[0] == "idle":  # "idle {pos.x} {pos.y}"
+                x, y = int(action_list[1]), int(action_list[2])
+                unit_name = f"ct_{y + shift}_{x + shift}"
+                action_vector_name = "ct_idle"
+                actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
+            else:
+                raise ValueError
+        return actions_dict
+
+    step = 0
+    for step in range(0, configuration.episodeSteps):
+        assert observations[0]["updates"] == observations[1]["updates"] == data["steps"][step][0]["observation"][
+            "updates"]
+        # get actions from a record, action for the current obs is in the next step of data
+        actions_1 = data["steps"][step + 1][0]["action"]
+        actions_2 = data["steps"][step + 1][1]["action"]
+        if team_of_interest == 1 or team_of_interest == -1:
+            # get units to know their types etc.
+            player1 = current_game_states[0].players[observations[0].player]
+            player1_units_dict_active = {}
+            player1_units_dict_all = {}
+            for unit in player1.units:
+                player1_units_dict_all[unit.id] = unit
+                if unit.can_act():
+                    player1_units_dict_active[unit.id] = unit
+            # get citytiles
+            player1_ct_list_active = []
+            for city in player1.cities.values():
+                for citytile in city.citytiles:
+                    if citytile.cooldown < 1:
+                        x_coord, y_coord = citytile.pos.x, citytile.pos.y
+                        player1_ct_list_active.append([x_coord, y_coord])
+            # copy actions since we need preprocess them before recording
+            if actions_1 is None:
+                actions_1_vec = []
+            else:
+                actions_1_vec = actions_1.copy()
+            # check actions and erase invalid ones
+            actions_1_vec = check_actions(actions_1_vec, player1_units_dict_active, player1_ct_list_active)
+            # if no action and unit can act, add "m {id} c"
+            actions_1_vec = update_units_actions(actions_1_vec, player1_units_dict_active)
+            # in no action and ct can act, add "idle {x} {y}"
+            # actions_1_vec = update_cts_actions(actions_1_vec, player1_ct_list_active)
+            # get actions vector representation
+            actions_1_dict = get_actions_dict(actions_1_vec, player1_units_dict_active, player1_units_dict_all)
+            # process only workers data
+            actions_1_dict.pop("carts")
+            actions_1_dict.pop("city_tiles")
+            proc_obsns[0].pop("carts")
+            proc_obsns[0].pop("city_tiles")
+            # probs are similar to actions
+            player1_data = tools.add_point(player1_data, actions_1_dict, actions_1_dict, proc_obsns[0], step)
+        if team_of_interest == 2 or team_of_interest == -1:
+            # get units to know their types etc.
+            player2 = current_game_states[1].players[(observations[0].player + 1) % 2]
+            player2_units_dict_active = {}
+            player2_units_dict_all = {}
+            for unit in player2.units:
+                player2_units_dict_all[unit.id] = unit
+                if unit.can_act():
+                    player2_units_dict_active[unit.id] = unit
+            # get citytiles
+            player2_ct_list_active = []
+            for city in player2.cities.values():
+                for citytile in city.citytiles:
+                    if citytile.cooldown < 1:
+                        x_coord, y_coord = citytile.pos.x, citytile.pos.y
+                        player2_ct_list_active.append([x_coord, y_coord])
+            # copy actions since we need preprocess them before recording
+            if actions_2 is None:
+                actions_2_vec = []
+            else:
+                actions_2_vec = actions_2.copy()
+            # check actions and erase invalid ones
+            actions_2_vec = check_actions(actions_2_vec, player2_units_dict_active, player2_ct_list_active)
+            # if no action and unit can act, add "m {id} c"
+            actions_2_vec = update_units_actions(actions_2_vec, player2_units_dict_active)
+            # in no action and ct can act, add "idle {x} {y}"
+            # actions_2_vec = update_cts_actions(actions_2_vec, player2_ct_list_active)
+            # get actions vector representation
+            actions_2_dict = get_actions_dict(actions_2_vec, player2_units_dict_active, player2_units_dict_all)
+            # process only workers data
+            actions_2_dict.pop("carts")
+            actions_2_dict.pop("city_tiles")
+            proc_obsns[1].pop("carts")
+            proc_obsns[1].pop("city_tiles")
+            # probs are similar to actions
+            player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_dict, proc_obsns[1], step)
+
+        # dones, observations, proc_obsns = environment.step_process((actions_1, actions_2))
+        dones, (obs1, obs2) = environment.step((actions_1, actions_2))
+        observations = (obs1, obs2)
+        current_game_states = environment.game_states
+
+        first_player_obs, second_player_obs = None, None
+        if team_of_interest == 1 or team_of_interest == -1:
+            first_player_obs = env_tools.get_separate_outputs(obs1, current_game_states[0])
+        if team_of_interest == 2 or team_of_interest == -1:
+            second_player_obs = env_tools.get_separate_outputs(obs2, current_game_states[1])
+        proc_obsns = (first_player_obs, second_player_obs)
+
+        if any(dones):
+            break
+
+    # count_team_1 = 0
+    # for value in list(player1_data.values()):
+    #     count_team_1 += len(value.data)
+    # count_team_2 = 0
+    # for value in list(player2_data.values()):
+    #     count_team_2 += len(value.data)
+    # print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
+
+    reward1, reward2 = data["rewards"][0], data["rewards"][1]
+    if reward1 is None:
+        reward1 = -1
+    if reward2 is None:
+        reward2 = -1
+    if reward1 > reward2:
+        final_reward_1 = tf.constant(1, dtype=tf.float16)
+        final_reward_2 = tf.constant(-1, dtype=tf.float16)
+    elif reward1 < reward2:
+        final_reward_2 = tf.constant(1, dtype=tf.float16)
+        final_reward_1 = tf.constant(-1, dtype=tf.float16)
+    else:
+        final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
+
+    progress = tf.linspace(0., 1., step + 2)[:-1]
+    progress = tf.cast(progress, dtype=tf.float16)
+
+    if team_of_interest == -1:
+        if only_wins:
+            if reward1 > reward2:
+                output = (player1_data, None), (final_reward_1, None), progress
+            elif reward1 < reward2:
+                output = (None, player2_data), (None, final_reward_2), progress
+            else:
+                output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+        else:
+            output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+    elif team_of_interest == 1:
+        output = (player1_data, None), (final_reward_1, None), progress
+    elif team_of_interest == 2:
+        output = (None, player2_data), (None, final_reward_2), progress
+    else:
+        raise ValueError
+
+    return output
+
+
+def scrape_file(env_name, file_name, team_name,
+                already_saved_files, lux_version, only_wins,
+                feature_maps_shape, acts_number, record_number):
+    with open(file_name, "r") as read_file:
+        raw_name = pathlib.Path(file_name).stem
+        if f"./data/tfrecords/imitator/train/{raw_name}_{team_name}.tfrec" in already_saved_files:
+            print(f"File {file_name} for {team_name}; is already saved.")
+            return
+        data = json.load(read_file)
+        if data["version"] != lux_version:
+            print(f"File {file_name}; is for an inappropriate lux version.")
+            return
+
+    output = scrape(env_name, data, team_name, only_wins)
+    (player1_data, player2_data), (final_reward_1, final_reward_2), progress = output
+    if player1_data == player2_data is None:
+        print(f"File {file_name}; does not have a required team.")
+        return
+    else:
+        print(f"File {file_name}; {record_number}; recording.")
+
+    tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
+                                          feature_maps_shape, acts_number, record_number,
+                                          raw_name + "_" + team_name)
+
+
 class Agent(abc.ABC):
 
     def __init__(self, config):  # ,
@@ -34,7 +336,7 @@ class Agent(abc.ABC):
             # workers_info: a ray interprocess (remote) object to store shared information
             # num_collectors: a total amount of collectors
         """
-        self._n_players = 2
+        # self._n_players = 2
         self._actions_number = actions_number
         self._env_name = config["environment"]
 
@@ -58,278 +360,7 @@ class Agent(abc.ABC):
         self._already_saved_files = glob.glob("./data/tfrecords/imitator/train/*.tfrec")
 
     def _scrape(self, data, team_name=None, only_wins=False):
-        """
-        Collects trajectories from an episode to the buffer.
-
-        A buffer contains items, each item consists of several n_points;
-        One n_point contains (action, action_probs, action_mask, observation,
-                              total reward, temporal_mask, progress);
-        action is a response for the current observation,
-        reward, done are for the current observation.
-        """
-        if team_name:
-            if data["info"]["TeamNames"][0] == team_name:
-                team_of_interest = 1
-            elif data["info"]["TeamNames"][1] == team_name:
-                team_of_interest = 2
-            else:
-                return (None, None), (None, None), None
-        else:
-            team_of_interest = -1
-
-        player1_data = {}
-        player2_data = {}
-
-        environment = gym.make(self._env_name, seed=data["configuration"]["seed"])
-        observations, proc_obsns = environment.reset_process()
-        configuration = environment.configuration
-        current_game_states = environment.game_states
-        width, height = current_game_states[0].map.width, current_game_states[0].map.height
-        shift = int((32 - width) / 2)  # to make all feature maps 32x32
-
-        def check_actions(actions, player_units_dict, player_cts_list):
-            new_actions = []
-            for action in actions:
-                action_list = action.split(" ")
-                if action_list[0] not in ["r", "bw", "bc"]:
-                    if action_list[1] in player_units_dict.keys():
-                        new_actions.append(action)
-                else:
-                    x, y = action_list[1], action_list[2]
-                    if [int(x), int(y)] in player_cts_list:
-                        new_actions.append(action)
-            return new_actions
-
-        def update_units_actions(actions, player_units_dict):
-            units_with_actions = []
-            for action in actions:
-                action_list = action.split(" ")
-                if action_list[0] not in ["r", "bw", "bc"]:
-                    units_with_actions.append(action_list[1])
-            for key in player_units_dict.keys():
-                if key not in units_with_actions:
-                    actions.append(f"m {key} c")
-            return actions
-
-        def update_cts_actions(actions, player_cts_list):
-            units_with_actions = []
-            for action in actions:
-                action_list = action.split(" ")
-                if action_list[0] in ["r", "bw", "bc"]:
-                    x, y = int(action_list[1]), int(action_list[2])
-                    units_with_actions.append([x, y])
-            for ct in player_cts_list:
-                if ct not in units_with_actions:
-                    actions.append(f"idle {ct[0]} {ct[1]}")
-            return actions
-
-        def get_actions_dict(player_actions, player_units_dict_active, player_units_dict_all):
-            actions_dict = {"workers": {}, "carts": {}, "city_tiles": {}}
-            for action in player_actions:
-                action_list = action.split(" ")
-                # units
-                if action_list[0] == "m":  # "m {id} {direction}"
-                    unit_name = action_list[1]  # "{id}"
-                    direction = action_list[2]
-                    try:
-                        unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
-                    except KeyError:  # it occurs when there is not valid action proposed
-                        continue
-                    action_vector_name = f"{unit_type}_m{direction}"  # "{unit_type}_m{direction}"
-                    if unit_type == "w":
-                        actions_dict["workers"][unit_name] = action_vector[action_vector_name]
-                    else:
-                        actions_dict["carts"][unit_name] = action_vector[action_vector_name]
-                elif action_list[0] == "t":  # "t {id} {dest_id} {resourceType} {amount}"
-                    unit_name = action_list[1]
-                    dest_name = action_list[2]
-                    resourceType = action_list[3]
-                    try:
-                        unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
-                    except KeyError:  # these is no such active unit to take action
-                        continue
-                    action_vector_name = f"{unit_type}_mc"  # REPLACEMENT
-                    # try:
-                    #     direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
-                    #                                                                          dest_name].pos)
-                    #     action_vector_name = f"{unit_type}_t{direction}{resourceType}"
-                    # except KeyError:  # there is no such destination unit
-                    #     action_vector_name = f"{unit_type}_mc"
-                    if unit_type == "w":
-                        actions_dict["workers"][unit_name] = action_vector[action_vector_name]
-                    else:
-                        actions_dict["carts"][unit_name] = action_vector[action_vector_name]
-                elif action_list[0] == "bcity":  # "bcity {id}"
-                    unit_name = action_list[1]
-                    action_vector_name = "w_build"
-                    actions_dict["workers"][unit_name] = action_vector[action_vector_name]
-                elif action_list[0] == "p":  # "p {id}"
-                    unit_name = action_list[1]
-                    # action_vector_name = "w_pillage"
-                    action_vector_name = "w_mc"  # REPLACEMENT
-                    actions_dict["workers"][unit_name] = action_vector[action_vector_name]
-                # city tiles
-                elif action_list[0] == "r":  # "r {pos.x} {pos.y}"
-                    x, y = int(action_list[1]), int(action_list[2])
-                    unit_name = f"ct_{y + shift}_{x + shift}"
-                    action_vector_name = "ct_research"
-                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
-                elif action_list[0] == "bw":  # "bw {pos.x} {pos.y}"
-                    x, y = int(action_list[1]), int(action_list[2])
-                    unit_name = f"ct_{y + shift}_{x + shift}"
-                    action_vector_name = "ct_build_worker"
-                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
-                elif action_list[0] == "bc":  # "bc {pos.x} {pos.y}"
-                    x, y = int(action_list[1]), int(action_list[2])
-                    unit_name = f"ct_{y + shift}_{x + shift}"
-                    action_vector_name = "ct_build_cart"
-                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
-                elif action_list[0] == "idle":  # "idle {pos.x} {pos.y}"
-                    x, y = int(action_list[1]), int(action_list[2])
-                    unit_name = f"ct_{y + shift}_{x + shift}"
-                    action_vector_name = "ct_idle"
-                    actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
-                else:
-                    raise ValueError
-            return actions_dict
-
-        step = 0
-        for step in range(0, configuration.episodeSteps):
-            assert observations[0]["updates"] == observations[1]["updates"] == data["steps"][step][0]["observation"][
-                "updates"]
-            # get actions from a record, action for the current obs is in the next step of data
-            actions_1 = data["steps"][step + 1][0]["action"]
-            actions_2 = data["steps"][step + 1][1]["action"]
-            if team_of_interest == 1 or team_of_interest == -1:
-                # get units to know their types etc.
-                player1 = current_game_states[0].players[observations[0].player]
-                player1_units_dict_active = {}
-                player1_units_dict_all = {}
-                for unit in player1.units:
-                    player1_units_dict_all[unit.id] = unit
-                    if unit.can_act():
-                        player1_units_dict_active[unit.id] = unit
-                # get citytiles
-                player1_ct_list_active = []
-                for city in player1.cities.values():
-                    for citytile in city.citytiles:
-                        if citytile.cooldown < 1:
-                            x_coord, y_coord = citytile.pos.x, citytile.pos.y
-                            player1_ct_list_active.append([x_coord, y_coord])
-                # copy actions since we need preprocess them before recording
-                if actions_1 is None:
-                    actions_1_vec = []
-                else:
-                    actions_1_vec = actions_1.copy()
-                # check actions and erase invalid ones
-                actions_1_vec = check_actions(actions_1_vec, player1_units_dict_active, player1_ct_list_active)
-                # if no action and unit can act, add "m {id} c"
-                actions_1_vec = update_units_actions(actions_1_vec, player1_units_dict_active)
-                # in no action and ct can act, add "idle {x} {y}"
-                # actions_1_vec = update_cts_actions(actions_1_vec, player1_ct_list_active)
-                # get actions vector representation
-                actions_1_dict = get_actions_dict(actions_1_vec, player1_units_dict_active, player1_units_dict_all)
-                # process only workers data
-                actions_1_dict.pop("carts")
-                actions_1_dict.pop("city_tiles")
-                proc_obsns[0].pop("carts")
-                proc_obsns[0].pop("city_tiles")
-                # probs are similar to actions
-                player1_data = tools.add_point(player1_data, actions_1_dict, actions_1_dict, proc_obsns[0], step)
-            if team_of_interest == 2 or team_of_interest == -1:
-                # get units to know their types etc.
-                player2 = current_game_states[1].players[(observations[0].player + 1) % 2]
-                player2_units_dict_active = {}
-                player2_units_dict_all = {}
-                for unit in player2.units:
-                    player2_units_dict_all[unit.id] = unit
-                    if unit.can_act():
-                        player2_units_dict_active[unit.id] = unit
-                # get citytiles
-                player2_ct_list_active = []
-                for city in player2.cities.values():
-                    for citytile in city.citytiles:
-                        if citytile.cooldown < 1:
-                            x_coord, y_coord = citytile.pos.x, citytile.pos.y
-                            player2_ct_list_active.append([x_coord, y_coord])
-                # copy actions since we need preprocess them before recording
-                if actions_2 is None:
-                    actions_2_vec = []
-                else:
-                    actions_2_vec = actions_2.copy()
-                # check actions and erase invalid ones
-                actions_2_vec = check_actions(actions_2_vec, player2_units_dict_active, player2_ct_list_active)
-                # if no action and unit can act, add "m {id} c"
-                actions_2_vec = update_units_actions(actions_2_vec, player2_units_dict_active)
-                # in no action and ct can act, add "idle {x} {y}"
-                # actions_2_vec = update_cts_actions(actions_2_vec, player2_ct_list_active)
-                # get actions vector representation
-                actions_2_dict = get_actions_dict(actions_2_vec, player2_units_dict_active, player2_units_dict_all)
-                # process only workers data
-                actions_2_dict.pop("carts")
-                actions_2_dict.pop("city_tiles")
-                proc_obsns[1].pop("carts")
-                proc_obsns[1].pop("city_tiles")
-                # probs are similar to actions
-                player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_dict, proc_obsns[1], step)
-
-            # dones, observations, proc_obsns = environment.step_process((actions_1, actions_2))
-            dones, (obs1, obs2) = environment.step((actions_1, actions_2))
-            observations = (obs1, obs2)
-            current_game_states = environment.game_states
-
-            first_player_obs, second_player_obs = None, None
-            if team_of_interest == 1 or team_of_interest == -1:
-                first_player_obs = env_tools.get_separate_outputs(obs1, current_game_states[0])
-            if team_of_interest == 2 or team_of_interest == -1:
-                second_player_obs = env_tools.get_separate_outputs(obs2, current_game_states[1])
-            proc_obsns = (first_player_obs, second_player_obs)
-
-            if any(dones):
-                break
-
-        # count_team_1 = 0
-        # for value in list(player1_data.values()):
-        #     count_team_1 += len(value.data)
-        # count_team_2 = 0
-        # for value in list(player2_data.values()):
-        #     count_team_2 += len(value.data)
-        # print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
-
-        reward1, reward2 = data["rewards"][0], data["rewards"][1]
-        if reward1 is None:
-            reward1 = -1
-        if reward2 is None:
-            reward2 = -1
-        if reward1 > reward2:
-            final_reward_1 = tf.constant(1, dtype=tf.float16)
-            final_reward_2 = tf.constant(-1, dtype=tf.float16)
-        elif reward1 < reward2:
-            final_reward_2 = tf.constant(1, dtype=tf.float16)
-            final_reward_1 = tf.constant(-1, dtype=tf.float16)
-        else:
-            final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
-
-        progress = tf.linspace(0., 1., step + 2)[:-1]
-        progress = tf.cast(progress, dtype=tf.float16)
-
-        if team_of_interest == -1:
-            if only_wins:
-                if reward1 > reward2:
-                    output = (player1_data, None), (final_reward_1, None), progress
-                elif reward1 < reward2:
-                    output = (None, player2_data), (None, final_reward_2), progress
-                else:
-                    output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
-            else:
-                output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
-        elif team_of_interest == 1:
-            output = (player1_data, None), (final_reward_1, None), progress
-        elif team_of_interest == 2:
-            output = (None, player2_data), (None, final_reward_2), progress
-        else:
-            raise ValueError
-
+        output = scrape(self._env_name, data, team_name, only_wins)
         return output
 
     # def _send_data_to_dmreverb_buffer(self, players_data, rewards, progress):
