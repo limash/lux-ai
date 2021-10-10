@@ -170,10 +170,11 @@ def actor_critic_efficient(actions_shape):
         def call(self, inputs, training=False, mask=None):
             outputs = self._stem(inputs, training)
             for idx, block in enumerate(self._blocks):
-                survival_prob = self._mconfig.survival_prob
-                if survival_prob:
-                    drop_rate = 1.0 - survival_prob
-                    survival_prob = 1.0 - drop_rate * float(idx) / len(self._blocks)
+                # survival_prob = self._mconfig.survival_prob
+                # if survival_prob:
+                #     drop_rate = 1.0 - survival_prob
+                #     survival_prob = 1.0 - drop_rate * float(idx) / len(self._blocks)
+                survival_prob = 1.0
                 outputs = block(outputs, training=training, survival_prob=survival_prob)
 
             x = outputs
