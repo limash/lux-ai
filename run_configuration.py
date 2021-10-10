@@ -18,7 +18,7 @@ CONF_Single = {
     # "default_lr": 1e-8,
     # "n_points": 40,
     # "buffer_size": 1000000,
-    "batch_size": 600,
+    "batch_size": 110,
     # "init_episodes": 25,
     # "iterations_number": 1000,
     # "save_interval": 100,
