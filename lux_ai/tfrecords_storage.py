@@ -20,6 +20,10 @@ def _float_feature(list_of_floats):
     return tf.train.Feature(float_list=tf.train.FloatList(value=list_of_floats))
 
 
+def _int_feature(list_of_ints):
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=list_of_ints))
+
+
 def to_tfrecord(reward, action_probs, observation):
     feature = {
         "observation": _bytestring_feature([observation]),
@@ -30,26 +34,65 @@ def to_tfrecord(reward, action_probs, observation):
     return tf.train.Example(features=tf.train.Features(feature=feature))
 
 
-def write_tfrecord(ds, record_number, record_name):
-    filename = f"data/tfrecords/imitator/train/{record_name}.tfrec"
-
-    with tf.io.TFRecordWriter(filename) as out_file:
-        # for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
-        for n, (observation, action_probs, reward) in enumerate(ds):
-            serial_action_probs = tf.io.serialize_tensor(action_probs)
-            # serial_action_mask = tf.io.serialize_tensor(action_mask)
-            # serial_observation = tf.io.serialize_tensor(observation)
-            serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
-            example = to_tfrecord(reward.numpy().astype(np.float32),
-                                  serial_action_probs.numpy(),
-                                  # serial_action_mask.numpy(),
-                                  serial_observation.numpy())
-            out_file.write(example.SerializeToString())
-        print(f"Wrote file #{record_number} {record_name}.tfrec containing {n} records")
+def to_tfrecord_for_rl(actions_numbers, actions_probs, observations, rewards, masks, progress_array, final_idx):
+    feature = {
+        "actions_numbers": _bytestring_feature([actions_numbers]),
+        "actions_probs": _bytestring_feature([actions_probs]),
+        "observations": _bytestring_feature([observations]),
+        "rewards": _bytestring_feature([rewards]),
+        "masks": _bytestring_feature([masks]),
+        "progress_array": _bytestring_feature([progress_array]),
+        "final_idx": _int_feature([final_idx]),
+    }
+    return tf.train.Example(features=tf.train.Features(feature=feature))
 
 
-def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
-                        feature_maps_shape, actions_number, record_number, record_name):
+def write_tfrecord(ds, record_number, record_name, is_for_rl):
+
+    if is_for_rl:
+        filename = f"data/tfrecords/rl/{record_name}.tfrec"
+        with tf.io.TFRecordWriter(filename) as out_file:
+            for n, (actions_numbers, actions_probs, observations, rewards,
+                    masks, progress_array, final_idx) in enumerate(ds):
+                s_actions_numbers = tf.io.serialize_tensor(actions_numbers)
+                s_actions_probs = tf.io.serialize_tensor(actions_probs)
+                s_observations = tf.io.serialize_tensor(tf.io.serialize_sparse(observations))
+                s_rewards = tf.io.serialize_tensor(rewards)
+                s_masks = tf.io.serialize_tensor(masks)
+                s_progress_array = tf.io.serialize_tensor(progress_array)
+                # s_final_idx = tf.io.serialize_tensor(final_idx)
+                example = to_tfrecord_for_rl(
+                    s_actions_numbers.numpy(),
+                    s_actions_probs.numpy(),
+                    s_observations.numpy(),
+                    s_rewards.numpy(),
+                    s_masks.numpy(),
+                    s_progress_array.numpy(),
+                    final_idx.numpy().astype(np.int64),
+                )
+                out_file.write(example.SerializeToString())
+    else:
+        filename = f"data/tfrecords/imitator/train/{record_name}.tfrec"
+        with tf.io.TFRecordWriter(filename) as out_file:
+            # for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
+            for n, (observation, action_probs, reward) in enumerate(ds):
+                serial_action_probs = tf.io.serialize_tensor(action_probs)
+                # serial_action_mask = tf.io.serialize_tensor(action_mask)
+                # serial_observation = tf.io.serialize_tensor(observation)
+                serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
+                example = to_tfrecord(reward.numpy().astype(np.float32),
+                                      serial_action_probs.numpy(),
+                                      # serial_action_mask.numpy(),
+                                      serial_observation.numpy())
+                out_file.write(example.SerializeToString())
+
+    print(f"Wrote file #{record_number} {record_name}.tfrec containing {n} records")
+
+
+def record(player1_data, player2_data, final_reward_1, final_reward_2,
+           feature_maps_shape, actions_number, record_number, record_name, progress,
+           is_for_rl):
+
     def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
@@ -73,6 +116,49 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                     yield observation, actions_probs, reward
                     # yield point[2], point[1], final_reward
                     counters += action
+
+    episode_length = 360
+    trajectory_steps = 40
+    total_len = episode_length + trajectory_steps
+
+    def data_gen_all_for_rl():
+        for j, player_data in enumerate((player1_data, player2_data)):
+            if player_data is None:
+                continue
+            final_reward = final_reward_1 if j == 0 else final_reward_2
+            for key, unit in player_data.items():
+                unit_type = key.split("_")[0]
+                if unit_type != "u":
+                    continue
+                actions = unit.actions
+                counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
+                # create np arrays to store data
+                actions_numbers = -np.ones([total_len])
+                actions_probs = np.zeros([total_len] + list(actions.shape))
+                observations = np.zeros([total_len] + list(unit.data[0][2].shape))
+                rewards = np.zeros([total_len])
+                masks = np.zeros([total_len])
+                progress_array = np.zeros([total_len])
+                i = 0
+                for i, point in enumerate(unit.data):
+                    # point [action, action_probs, observation]
+                    actions_numbers[i] = np.argmax(point[0])
+                    actions_probs[i] = point[1]
+                    observations[i] = point[2]
+                    rewards[i] = final_reward
+                    masks[i] = 1
+                    progress_array[i] = progress[unit.step[i]].numpy()
+                    counters += point[0]
+                # cast to tf tensors
+                actions_numbers = tf.constant(actions_numbers, dtype=tf.int16)
+                actions_probs = tf.constant(actions_probs, dtype=tf.float16)
+                observations = tf.sparse.from_dense(tf.constant(observations, dtype=tf.float16))
+                rewards = tf.constant(rewards, dtype=tf.float16)
+                masks = tf.constant(masks, dtype=tf.int16)
+                progress_array = tf.constant(progress_array, dtype=tf.float16)
+                final_idx = tf.constant(i, dtype=tf.int16)
+
+                yield actions_numbers, actions_probs, observations, rewards, masks, progress_array, final_idx
 
     def data_gen_soft():
         """Generator, which softens very skewed distribution of actions
@@ -125,21 +211,34 @@ def record_for_imitator(player1_data, player2_data, final_reward_1, final_reward
                         break
 
     # result = []
-    # generator = data_gen_all()
+    # generator = data_gen_all_for_rl()
     # while len(result) < 1000:
     #     x = next(generator)
     #     result.append(x)
 
-    dataset = tf.data.Dataset.from_generator(
-        data_gen_all,
-        output_signature=(
-            tf.SparseTensorSpec(shape=feature_maps_shape, dtype=tf.float16),
-            tf.TensorSpec(shape=actions_number, dtype=tf.float16),
-            tf.TensorSpec(shape=(), dtype=tf.float16),
-        ))
+    if is_for_rl:
+        dataset = tf.data.Dataset.from_generator(
+            data_gen_all_for_rl,
+            output_signature=(
+                tf.TensorSpec(shape=total_len, dtype=tf.int16),
+                tf.TensorSpec(shape=[total_len, actions_number], dtype=tf.float16),
+                tf.SparseTensorSpec(shape=[total_len] + list(feature_maps_shape), dtype=tf.float16),
+                tf.TensorSpec(shape=total_len, dtype=tf.float16),
+                tf.TensorSpec(shape=total_len, dtype=tf.int16),
+                tf.TensorSpec(shape=total_len, dtype=tf.float16),
+                tf.TensorSpec(shape=(), dtype=tf.int16),
+            ))
+    else:
+        dataset = tf.data.Dataset.from_generator(
+            data_gen_all,
+            output_signature=(
+                tf.SparseTensorSpec(shape=feature_maps_shape, dtype=tf.float16),
+                tf.TensorSpec(shape=actions_number, dtype=tf.float16),
+                tf.TensorSpec(shape=(), dtype=tf.float16),
+            ))
 
     # foo = list(dataset.take(1))
-    write_tfrecord(dataset, record_number, record_name)
+    write_tfrecord(dataset, record_number, record_name, is_for_rl)
 
 
 def up_down(obs, probs):

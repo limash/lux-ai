@@ -29,7 +29,9 @@ def scrape(env_name, data, team_name=None, only_wins=False):
     reward, done are for the current observation.
     """
     if team_name:
-        if data["info"]["TeamNames"][0] == team_name:
+        if data["info"]["TeamNames"][0] == data["info"]["TeamNames"][0] == team_name:
+            team_of_interest = -1
+        elif data["info"]["TeamNames"][0] == team_name:
             team_of_interest = 1
         elif data["info"]["TeamNames"][1] == team_name:
             team_of_interest = 2
@@ -315,9 +317,9 @@ def scrape_file(env_name, file_name, team_name,
     else:
         print(f"File {file_name}; {record_number}; recording.")
 
-    tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
-                                          feature_maps_shape, acts_number, record_number,
-                                          raw_name + "_" + team_name)
+    tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
+                             feature_maps_shape, acts_number, record_number,
+                             raw_name + "_" + team_name)
 
 
 class Agent(abc.ABC):
@@ -352,6 +354,7 @@ class Agent(abc.ABC):
         # self._workers_info = workers_info
         # self._num_collectors = num_collectors
 
+        self._is_for_rl = config["is_for_rl"]
         self._lux_version = config["lux_version"]
         self._team_name = config["team_name"]
         self._only_wins = config["only_wins"]
@@ -410,9 +413,10 @@ class Agent(abc.ABC):
             else:
                 print(f"File {file_name}; {i}; recording.")
 
-            tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
-                                                  self._feature_maps_shape, self._actions_number, i,
-                                                  raw_name+"_"+self._team_name)
+            tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
+                                     self._feature_maps_shape, self._actions_number, i,
+                                     raw_name + "_" + self._team_name, progress,
+                                     self._is_for_rl)
             j += 1
             if j == files_to_save:
                 print(f"{files_to_save} files saved, exit.")

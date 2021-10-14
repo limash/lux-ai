@@ -131,8 +131,8 @@ class Agent(abc.ABC):
     def collect_and_store(self, number_of_collects):
         for i in range(number_of_collects):
             (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
-            tfrecords_storage.record_for_imitator(player1_data, player2_data, final_reward_1, final_reward_2,
-                                                  self._feature_maps_shape, self._actions_number, i)
+            tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
+                                     self._feature_maps_shape, self._actions_number, i)
 
 # def update_model(self, data):
     #     self._model.set_weights(data['weights'])

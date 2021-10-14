@@ -54,7 +54,6 @@ def scrape():
 
     if config["scrape_type"] == "single":
         scraper_agent = scraper.Agent(config)
-        scraper_agent.scrape_once()
         scraper_agent.scrape_all()
     elif config["scrape_type"] == "multi":
         parallel_calls = 8
