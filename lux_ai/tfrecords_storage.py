@@ -372,24 +372,30 @@ def read_records_for_rl(feature_maps_shape, actions_shape, path):
 
         final_idx = example["final_idx"]
         final_idx.set_shape(())
+        start_idx = tf.random.uniform(shape=(), minval=0, maxval=final_idx, dtype=tf.int64)
 
-        return tf.cast(actions_numbers, dtype=tf.int32), \
-               tf.cast(actions_probs, dtype=tf.float32), \
-               tf.cast(observations, dtype=tf.float32), \
-               tf.cast(rewards, dtype=tf.float32), \
-               tf.cast(masks, dtype=tf.float32), \
-               tf.cast(progress_array, dtype=tf.float32), \
-               tf.cast(final_idx, dtype=tf.int32),
+        return tf.cast(actions_numbers[start_idx: start_idx + trajectory_steps], dtype=tf.int32), \
+               tf.cast(actions_probs[start_idx: start_idx + trajectory_steps, :], dtype=tf.float32), \
+               tf.cast(observations[start_idx: start_idx + trajectory_steps, :, :, :], dtype=tf.float32), \
+               tf.cast(rewards[start_idx: start_idx + trajectory_steps], dtype=tf.float32), \
+               tf.cast(masks[start_idx: start_idx + trajectory_steps], dtype=tf.float32), \
+               tf.cast(progress_array[start_idx: start_idx + trajectory_steps], dtype=tf.float32)
+        # tf.cast(final_idx, dtype=tf.int32),
 
-    option_no_order = tf.data.Options()
-    option_no_order.experimental_deterministic = False
+    # option_no_order = tf.data.Options()
+    # option_no_order.experimental_deterministic = False
 
     # test_dataset = tf.data.TFRecordDataset(path + '27374559_Toad Brigade.tfrec')
+    # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
+    #     count += 1
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    filenames_ds = filenames_ds.with_options(option_no_order)
+    filenames_ds = filenames_ds.shuffle(len(filenames), reshuffle_each_iteration=True)
+    filenames_ds = filenames_ds.repeat(episode_length)
+
+    # filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
     return ds

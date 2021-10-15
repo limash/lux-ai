@@ -21,7 +21,7 @@ CONF_RL = {
     "lambda": 0.8,
     "debug": True,
     "default_lr": 1e-6,
-    "batch_size": 10,
+    "batch_size": 5,
     "iterations_number": 1000,
     "save_interval": 100,
     "entropy_c": 2.e-3,

@@ -145,7 +145,7 @@ class ACAgent(abc.ABC):
         if not config["debug"]:
             self._training_step = tf.function(self._training_step)
 
-    def _training_step(self, actions, behaviour_policy_probs, observations, total_rewards, masks, progress, final_idx):
+    def _training_step(self, actions, behaviour_policy_probs, observations, total_rewards, masks, progress):
         print("Tracing")
 
         if self._is_debug:
@@ -218,16 +218,16 @@ class ACAgent(abc.ABC):
             maps_merged = tf.reshape(maps, (-1, maps_shape[2], maps_shape[3], maps_shape[4]))
             # maps_merged = tf.reshape(maps, (-1, maps_shape[2], maps_shape[3]))
             # scalars_merged = tf.reshape(scalars, (-1, scalars_shape[2]))
-            logits_merged, values_merged = self._model(maps_merged, training=True)
-            logits = tf.reshape(logits_merged, (maps_shape[0], maps_shape[1], -1))
+            probs_merged, values_merged = self._model(maps_merged, training=True)
+            probs = tf.reshape(probs_merged, (maps_shape[0], maps_shape[1], -1))
             values = tf.reshape(values_merged, (maps_shape[0], maps_shape[1], -1))
             # -
 
             # logits = tf.roll(logits, shift=1, axis=0)  # shift by 1 along time dimension, to match a pattern
             # values = tf.roll(values, shift=1, axis=0)  # where actions, logits, etc. led to the observation
-            logits = tf.roll(logits, shift=1, axis=1)  # shift by 1 along time dimension, to match a pattern
-            values = tf.roll(values, shift=1, axis=1)  # where actions, logits, etc. led to the observation
-            target_action_log_probs = tools.get_prob_logs_from_logits(logits, actions, self._actions_shape)
+            # probs = tf.roll(probs, shift=1, axis=1)  # shift by 1 along time dimension, to match a pattern
+            # values = tf.roll(values, shift=1, axis=1)  # where actions, logits, etc. led to the observation
+            target_action_log_probs = tools.get_prob_logs_from_probs(probs, actions, self._actions_shape)
 
             with tape.stop_recording():
                 log_rhos = target_action_log_probs - behaviour_action_log_probs
@@ -247,7 +247,7 @@ class ACAgent(abc.ABC):
             with tape.stop_recording():
                 # calculate targets
                 # targets = tools.prepare_td_lambda(tf.squeeze(values), returns, None, self._lambda, 1.)
-                targets = tools.tf_prepare_td_lambda_no_rewards(values, total_rewards[:, -1], self._lambda, 1.)
+                targets = tools.tf_prepare_td_lambda_no_rewards(values, total_rewards[:, 0], self._lambda, 1.)
                 targets = targets * mask2d
 
             values = values * mask2d
@@ -273,7 +273,7 @@ class ACAgent(abc.ABC):
             actor_loss = tf.reduce_sum(actor_loss)
 
             # entropy loss
-            entropy = tools.get_entropy(logits, mask3d)
+            entropy = tools.get_entropy_from_probs(probs, mask3d)
             # entropy_loss = -1 * self._entropy_c * tf.reduce_sum(entropy)
             # entropy_loss = -1 * self._entropy_c * tf.reduce_mean(entropy)
             foo = 1 - progress * (1 - self._entropy_c_decay)

@@ -128,6 +128,15 @@ def get_entropy(logits, mask=None):
     return entropy
 
 
+def get_entropy_from_probs(probs, mask=None):
+    log_probs = tf.math.log(tf.clip_by_value(probs, 1.e-32, 1.))
+    if mask is not None:
+        probs = probs * mask
+        log_probs = log_probs * mask
+    entropy = tf.reduce_sum(-probs * log_probs, axis=-1)
+    return entropy
+
+
 def norm_probs(probs_unnorm):
     # spec_probs_unnorm = layers.Multiply()([all_probs, input_B])
     # probs = layers.Lambda(norm_probs, name="probs_output")(spec_probs_unnorm)
