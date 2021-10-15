@@ -89,8 +89,8 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl):
 
 
 def record(player1_data, player2_data, final_reward_1, final_reward_2,
-           feature_maps_shape, actions_number, record_number, record_name, progress,
-           is_for_rl):
+           feature_maps_shape, actions_number, record_number, record_name,
+           progress=None, is_for_rl=False):
     def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:

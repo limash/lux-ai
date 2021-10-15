@@ -62,8 +62,8 @@ def scrape():
 
         for i, file_names in enumerate(zip(*sets)):
             print(f"Iteration {i} starts")
-            ray.init(num_cpus=parallel_calls, num_gpus=1)
-            scraper_object = ray.remote(num_gpus=1 / parallel_calls)(scraper.scrape_file)
+            ray.init(num_cpus=parallel_calls)
+            scraper_object = ray.remote(scraper.scrape_file)
             futures = [scraper_object.remote(env_name, file_names[j], team_name,
                                              already_saved_files, lux_version, only_wins,
                                              feature_maps_shape, actions_number, i)
