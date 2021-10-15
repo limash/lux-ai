@@ -80,6 +80,13 @@ def get_prob_logs_from_logits(logits, actions, n_outputs):
     return logs
 
 
+def get_prob_logs_from_probs(probs, actions, n_outputs):
+    mask = tf.one_hot(actions, n_outputs, dtype=tf.float32)
+    masked_probs = tf.reduce_sum(probs * mask, axis=-1)
+    logs = tf.math.log(tf.clip_by_value(masked_probs, 1.e-32, 1.))  # inappropriate values will be masked
+    return logs
+
+
 def prepare_td_lambda(values, returns, rewards, lmb, gamma):
     from collections import deque
 

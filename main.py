@@ -2,49 +2,37 @@ import pickle
 import glob
 import random
 # from pathlib import Path
-
 # import reverb
 
 from lux_ai import dm_reverb_storage, collector, scraper, trainer, tools
 from lux_gym.envs.lux.action_vectors import actions_number
-from run_configuration import CONF_Scraper, CONF_Single, CONF_ActorCritic
+from run_configuration import CONF_Scraper, CONF_RL, CONF_Main, CONF_Imitate
 
-main_config = CONF_ActorCritic
-single_config = CONF_Single
+main_config = CONF_Main
+rl_config = CONF_RL
+imitate_config = CONF_Imitate
 scraper_config = CONF_Scraper
-# complex_config = CONF_Complex
 
 
-def imitate(input_data):  # , checkpoint):
-    config = {**main_config, **single_config}
+def imitate(input_data):
+    config = {**main_config, **imitate_config}
+    trainer_agent = trainer.Agent(config, input_data)
+    trainer_agent.imitate()
+
+
+def rl_train(input_data):  # , checkpoint):
+    config = {**main_config, **rl_config}
     # if checkpoint is not None:
     #     path = str(Path(checkpoint).parent)  # due to https://github.com/deepmind/reverb/issues/12
     #     checkpointer = reverb.checkpointers.DefaultCheckpointer(path=path)
     # else:
     #     checkpointer = None
-
     # feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
     # buffer = storage.UniformBuffer(feature_maps_shape,
     #                                num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
     #                                n_points=config["n_points"], checkpointer=checkpointer)
-    # init collector:
-    # collector_agent = collector.Agent(config)
-    # collector_agent.collect_and_store(2)
-    # init trainer
-    trainer_agent = trainer.Agent(config, input_data)
-    trainer_agent.imitate()
-    # init single_agent, which collects and trains
-
-    # data = {
-    #     'weights': weights,
-    #     'mask': mask,
-    #     'reward': reward
-    # }
-    # with open('data/data.pickle', 'wb') as f:
-    #     pickle.dump(data, f, protocol=4)
-    # with open('data/checkpoint', 'w') as text_file:
-    #     print(checkpoint, file=text_file)
-    print("Done")
+    trainer_agent = trainer.ACAgent(config, input_data)
+    trainer_agent.do_train()
 
 
 def scrape():
@@ -82,7 +70,6 @@ def scrape():
                        for j in range(len(file_names))]
             _ = ray.get(futures)
             ray.shutdown()
-            # [ray.cancel(object_ref) for object_ref in futures]
     else:
         raise ValueError
 
@@ -96,11 +83,11 @@ if __name__ == '__main__':
     except FileNotFoundError:
         init_data = None
 
-    # init_checkpoint = None  # "./data/dmreverb_store/looking_for_halite/checkpoint"
-
     if main_config["setup"] == "imitate":
-        imitate(init_data)  # , init_checkpoint)
+        imitate(init_data)
     elif main_config["setup"] == "scrape":
         scrape()
+    elif main_config["setup"] == "rl":
+        rl_train(init_data)
     else:
         raise NotImplementedError

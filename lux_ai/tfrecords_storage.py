@@ -48,7 +48,6 @@ def to_tfrecord_for_rl(actions_numbers, actions_probs, observations, rewards, ma
 
 
 def write_tfrecord(ds, record_number, record_name, is_for_rl):
-
     if is_for_rl:
         filename = f"data/tfrecords/rl/{record_name}.tfrec"
         with tf.io.TFRecordWriter(filename) as out_file:
@@ -92,7 +91,6 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl):
 def record(player1_data, player2_data, final_reward_1, final_reward_2,
            feature_maps_shape, actions_number, record_number, record_name, progress,
            is_for_rl):
-
     def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
@@ -326,4 +324,72 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     # ds = ds.map(rearrange, num_parallel_calls=AUTO)
     ds = ds.shuffle(10000)
+    return ds
+
+
+def read_records_for_rl(feature_maps_shape, actions_shape, path):
+    # read from TFRecords. For optimal performance, read from multiple
+    # TFRecord files at once and set the option experimental_deterministic = False
+    # to allow order-altering optimizations.
+    episode_length = 360
+    trajectory_steps = 40
+    total_len = episode_length + trajectory_steps
+
+    def read_tfrecord(example):
+        features = {
+            "actions_numbers": tf.io.FixedLenFeature([], tf.string),
+            "actions_probs": tf.io.FixedLenFeature([], tf.string),
+            "observations": tf.io.FixedLenFeature([], tf.string),
+            "rewards": tf.io.FixedLenFeature([], tf.string),
+            "masks": tf.io.FixedLenFeature([], tf.string),
+            "progress_array": tf.io.FixedLenFeature([], tf.string),
+            "final_idx": tf.io.FixedLenFeature([], tf.int64),
+        }
+        # decode the TFRecord
+        example = tf.io.parse_single_example(example, features)
+
+        actions_numbers = tf.io.parse_tensor(example["actions_numbers"], tf.int16)
+        actions_numbers.set_shape(total_len)
+
+        actions_probs = tf.io.parse_tensor(example["actions_probs"], tf.float16)
+        actions_probs.set_shape([total_len, actions_shape])
+
+        observations = tf.io.parse_tensor(example["observations"], tf.string)
+        observations = tf.expand_dims(observations, axis=0)
+        observations = tf.io.deserialize_many_sparse(observations, dtype=tf.float16)
+        observations = tf.sparse.to_dense(observations)
+        observations = tf.squeeze(observations)
+        observations.set_shape([total_len] + list(feature_maps_shape))
+
+        rewards = tf.io.parse_tensor(example["rewards"], tf.float16)
+        rewards.set_shape(total_len)
+
+        masks = tf.io.parse_tensor(example["masks"], tf.int16)
+        masks.set_shape(total_len)
+
+        progress_array = tf.io.parse_tensor(example["progress_array"], tf.float16)
+        progress_array.set_shape(total_len)
+
+        final_idx = example["final_idx"]
+        final_idx.set_shape(())
+
+        return tf.cast(actions_numbers, dtype=tf.int32), \
+               tf.cast(actions_probs, dtype=tf.float32), \
+               tf.cast(observations, dtype=tf.float32), \
+               tf.cast(rewards, dtype=tf.float32), \
+               tf.cast(masks, dtype=tf.float32), \
+               tf.cast(progress_array, dtype=tf.float32), \
+               tf.cast(final_idx, dtype=tf.int32),
+
+    option_no_order = tf.data.Options()
+    option_no_order.experimental_deterministic = False
+
+    # test_dataset = tf.data.TFRecordDataset(path + '27374559_Toad Brigade.tfrec')
+    # for item in test_dataset:
+    #     foo = read_tfrecord(item)
+
+    filenames = tf.io.gfile.glob(path + "*.tfrec")
+    filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    filenames_ds = filenames_ds.with_options(option_no_order)
+    ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
     return ds
