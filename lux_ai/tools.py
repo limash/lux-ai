@@ -18,8 +18,23 @@ def squeeze_transform(obs_base, acts_rews):
     return observations, (actions_probs, total_rewards)
 
 
-def skewed_kldivergence_loss(class_weight):
+def skewed_kldivergence_loss():
     def loss_function(y_true, y_pred):
+        one = tf.constant(1.)
+        # class_sums = tf.reduce_sum(y_true, axis=0)
+        # movements_mean = tf.reduce_mean(class_sums[:4])
+        # center_multiplier = movements_mean / class_sums[4]
+        # if not tf.math.is_finite(center_multiplier):
+        #     center_multiplier = one
+        # build_multiplier = movements_mean / class_sums[5]
+        # if not tf.math.is_finite(build_multiplier):
+        #     build_multiplier = one
+        center_multiplier = tf.constant(0.1)
+        build_multiplier = tf.constant(2.)
+
+        class_weights = tf.stack([one, one, one, one, center_multiplier, build_multiplier], axis=0)
+        class_weights = tf.expand_dims(class_weights, axis=0)
+
         y_pred = tf.convert_to_tensor(y_pred)
         y_true = tf.cast(y_true, y_pred.dtype)
         y_true = backend.clip(y_true, backend.epsilon(), 1)
@@ -30,7 +45,7 @@ def skewed_kldivergence_loss(class_weight):
         # result = temp * class_weight
         # result_v = result.numpy()
         # result_sum = tf.reduce_sum(result, axis=-1)
-        return tf.reduce_sum(class_weight * y_true * tf.math.log(y_true / y_pred), axis=-1)
+        return tf.reduce_sum(class_weights * y_true * tf.math.log(y_true / y_pred), axis=-1)
 
     return loss_function
 

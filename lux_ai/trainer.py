@@ -38,12 +38,13 @@ class Agent(abc.ABC):
         dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
         self._model(dummy_input)
 
-        class_weights = np.ones(self._actions_shape, dtype=np.single)
-        class_weights[4] = 0.1
-        class_weights[5] = 2.
-        class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
-        self._class_weights = tf.expand_dims(class_weights, axis=0)
-        self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
+        # class_weights = np.ones(self._actions_shape, dtype=np.single)
+        # class_weights[4] = 0.1
+        # class_weights[5] = 2.
+        # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
+        # self._class_weights = tf.expand_dims(class_weights, axis=0)
+        # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
+        self._loss_function = tools.skewed_kldivergence_loss()
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -59,12 +60,12 @@ class Agent(abc.ABC):
     def imitate(self):
         ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/train/")
-        ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
-                                                               "data/tfrecords/imitator/validation/")
+        # ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
+        #                                                        "data/tfrecords/imitator/validation/")
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
-        ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
+        # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        # for sample in ds_valid.take(10):
+        # for sample in ds_train.take(10):
         #     # sample = tools.squeeze_transform(*sample)
         #     observations = sample[0].numpy()
         #     actions_probs = sample[1][0].numpy()
@@ -75,12 +76,12 @@ class Agent(abc.ABC):
         #     skewed_loss = self._loss_function(sample[1][0], probs_output)
         #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
-        lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
-        early_stop_callback = tf.keras.callbacks.EarlyStopping(
-            monitor='val_loss',
-            patience=2,
-            restore_best_weights=True,
-        )
+        # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
+        # early_stop_callback = tf.keras.callbacks.EarlyStopping(
+        #     monitor='val_loss',
+        #     patience=2,
+        #     restore_best_weights=True,
+        # )
 
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),  # , clipnorm=4.),
@@ -97,7 +98,8 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=1, validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
+        self._model.fit(ds_train, epochs=1)
+        # , validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
