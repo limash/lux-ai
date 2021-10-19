@@ -27,8 +27,9 @@ def _int_feature(list_of_ints):
 def to_tfrecord(reward, action_probs, observation):
     feature = {
         "observation": _bytestring_feature([observation]),
-        # "action_mask": _bytestring_feature([action_mask]),
-        "action_probs": _bytestring_feature([action_probs]),
+        "action_probs_1": _bytestring_feature([action_probs[0]]),
+        "action_probs_2": _bytestring_feature([action_probs[1]]),
+        "action_probs_3": _bytestring_feature([action_probs[2]]),
         "reward": _float_feature([reward]),
     }
     return tf.train.Example(features=tf.train.Features(feature=feature))
@@ -73,15 +74,11 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl):
     else:
         filename = f"data/tfrecords/imitator/train/{record_name}.tfrec"
         with tf.io.TFRecordWriter(filename) as out_file:
-            # for n, (observation, action_mask, action_probs, reward) in enumerate(ds):
             for n, (observation, action_probs, reward) in enumerate(ds):
-                serial_action_probs = tf.io.serialize_tensor(action_probs)
-                # serial_action_mask = tf.io.serialize_tensor(action_mask)
-                # serial_observation = tf.io.serialize_tensor(observation)
+                serial_action_probs = [tf.io.serialize_tensor(item).numpy() for item in action_probs]
                 serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
                 example = to_tfrecord(reward.numpy().astype(np.float32),
-                                      serial_action_probs.numpy(),
-                                      # serial_action_mask.numpy(),
+                                      serial_action_probs,
                                       serial_observation.numpy())
                 out_file.write(example.SerializeToString())
 
@@ -89,7 +86,7 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl):
 
 
 def record(player1_data, player2_data, final_reward_1, final_reward_2,
-           feature_maps_shape, actions_number, record_number, record_name,
+           feature_maps_shape, actions_shape, record_number, record_name,
            progress=None, is_for_rl=False):
     def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
@@ -109,11 +106,11 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                     #     continue
                     # store observation, action_probs, reward
                     observation = tf.sparse.from_dense(tf.constant(point[2], dtype=tf.float16))
-                    actions_probs = tf.constant(point[1], dtype=tf.float16)
+                    actions_probs = tuple([tf.constant(item, dtype=tf.float16) for item in point[1]])
                     reward = tf.constant(final_reward, dtype=tf.float16)
                     yield observation, actions_probs, reward
                     # yield point[2], point[1], final_reward
-                    counters += action
+                    counters += action[0]
 
     episode_length = 360
     trajectory_steps = 40
@@ -209,7 +206,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                         break
 
     # result = []
-    # generator = data_gen_all_for_rl()
+    # generator = data_gen_all()
     # while len(result) < 1000:
     #     x = next(generator)
     #     result.append(x)
@@ -219,7 +216,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
             data_gen_all_for_rl,
             output_signature=(
                 tf.TensorSpec(shape=total_len, dtype=tf.int16),
-                tf.TensorSpec(shape=[total_len, actions_number], dtype=tf.float16),
+                tf.TensorSpec(shape=[total_len, actions_shape], dtype=tf.float16),
                 tf.SparseTensorSpec(shape=[total_len] + list(feature_maps_shape), dtype=tf.float16),
                 tf.TensorSpec(shape=total_len, dtype=tf.float16),
                 tf.TensorSpec(shape=total_len, dtype=tf.int16),
@@ -231,7 +228,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
             data_gen_all,
             output_signature=(
                 tf.SparseTensorSpec(shape=feature_maps_shape, dtype=tf.float16),
-                tf.TensorSpec(shape=actions_number, dtype=tf.float16),
+                tuple([tf.TensorSpec(shape=actions_number, dtype=tf.float16) for actions_number in actions_shape]),
                 tf.TensorSpec(shape=(), dtype=tf.float16),
             ))
 

@@ -363,7 +363,7 @@ class Agent(abc.ABC):
             # num_collectors: a total amount of collectors
         """
         # self._n_players = 2
-        self._actions_number = None
+        self._actions_shape = [item.shape for item in empty_worker_action_vectors]
         self._env_name = config["environment"]
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
@@ -438,7 +438,7 @@ class Agent(abc.ABC):
                 print(f"File {file_name}; {i}; recording.")
 
             tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
-                                     self._feature_maps_shape, self._actions_number, i,
+                                     self._feature_maps_shape, self._actions_shape, i,
                                      raw_name + "_" + self._team_name, progress,
                                      self._is_for_rl)
             j += 1
