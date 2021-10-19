@@ -162,8 +162,12 @@ def actor_critic_efficient(actions_shape):
             self._flatten = keras.layers.Flatten()
 
             self._workers_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-            self._workers_probs1 = keras.layers.Dense(actions_number, activation="softmax",
-                                                      kernel_initializer=initializer_random)
+            self._workers_probs1_0 = keras.layers.Dense(actions_number[0][0], activation="softmax",
+                                                        kernel_initializer=initializer_random)
+            self._workers_probs1_1 = keras.layers.Dense(actions_number[1][0], activation="softmax",
+                                                        kernel_initializer=initializer_random)
+            self._workers_probs1_2 = keras.layers.Dense(actions_number[2][0], activation="softmax",
+                                                        kernel_initializer=initializer_random)
             self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
                                                 activation=keras.activations.tanh)
 
@@ -192,8 +196,10 @@ def actor_critic_efficient(actions_shape):
             z = tf.concat([z1, z2], axis=1)
 
             w = self._workers_probs0(z)
-            w = self._workers_probs1(w)
-            probs = w
+            probs1 = self._workers_probs1_0(w)
+            probs2 = self._workers_probs1_1(w)
+            probs3 = self._workers_probs1_2(w)
+            probs = (probs1, probs2, probs3)
 
             baseline = self._baseline(tf.concat([y, z], axis=1))
 

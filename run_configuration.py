@@ -1,6 +1,6 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "scrape",
+    "setup": "imitate",
     "model_name": "actor_critic_efficient",
     "n_points": 40,
 }

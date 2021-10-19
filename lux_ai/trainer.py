@@ -8,7 +8,7 @@ import tensorflow_addons as tfa
 # import reverb
 
 from lux_ai import models, tools, tfrecords_storage
-from lux_gym.envs.lux.action_vectors import actions_number
+from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -19,7 +19,7 @@ class Agent(abc.ABC):
     def __init__(self, config, data):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
-        self._actions_shape = actions_number
+        self._actions_shape = [item.shape for item in empty_worker_action_vectors]
         if config["model_name"] == "actor_critic_residual":
             self._model = models.actor_critic_residual(self._actions_shape)
         elif config["model_name"] == "actor_critic_efficient":
@@ -31,10 +31,7 @@ class Agent(abc.ABC):
         dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
         # dummy_feature_maps[16, 16, :1] = 1
         dummy_feature_maps[6, 6, :1] = 1
-        # dummy_input = (tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32),
-        #                tf.convert_to_tensor(worker_action_mask, dtype=tf.float32))
         dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
-        # dummy_input, (_, _) = tools.squeeze_transform(dummy_input, (None, None))
         dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
         self._model(dummy_input)
 

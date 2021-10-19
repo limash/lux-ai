@@ -288,8 +288,9 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     def read_tfrecord(example):
         features = {
             "observation": tf.io.FixedLenFeature([], tf.string),
-            # "action_mask": tf.io.FixedLenFeature([], tf.string),
-            "action_probs": tf.io.FixedLenFeature([], tf.string),
+            "action_probs_1": tf.io.FixedLenFeature([], tf.string),
+            "action_probs_2": tf.io.FixedLenFeature([], tf.string),
+            "action_probs_3": tf.io.FixedLenFeature([], tf.string),
             "reward": tf.io.FixedLenFeature([], tf.float32),
         }
         # decode the TFRecord
@@ -304,8 +305,13 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
         observation.set_shape(feature_maps_shape)
         # action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
         # action_mask.set_shape(actions_shape)
-        action_probs = tf.io.parse_tensor(example["action_probs"], tf.float16)
-        action_probs.set_shape(actions_shape)
+        action_probs_1 = tf.io.parse_tensor(example["action_probs_1"], tf.float16)
+        action_probs_1.set_shape(actions_shape[0][0])
+        action_probs_2 = tf.io.parse_tensor(example["action_probs_2"], tf.float16)
+        action_probs_2.set_shape(actions_shape[1][0])
+        action_probs_3 = tf.io.parse_tensor(example["action_probs_3"], tf.float16)
+        action_probs_3.set_shape(actions_shape[2][0])
+        action_probs = (action_probs_1, action_probs_2, action_probs_3)
         reward = example["reward"]
         reward.set_shape(())
 
@@ -313,6 +319,12 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
 
     option_no_order = tf.data.Options()
     option_no_order.experimental_deterministic = False
+
+    # test_dataset = tf.data.TFRecordDataset(path + '28231713_Toad Brigade.tfrec')
+    # count = 0
+    # for item in test_dataset:
+    #     foo = read_tfrecord(item)
+    #     count += 1
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
