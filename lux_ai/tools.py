@@ -64,10 +64,10 @@ def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
             # point_value = [action, action_probs, actions_masks[i], observation]
             point_value = [action, action_probs, observation]
             if k1 in player_data.keys():
-                player_data[k1].append(point_value, current_step, action)
+                player_data[k1].append(point_value, current_step, action[0])
             else:
-                player_data[k1] = DataValue(action.shape[0])
-                player_data[k1].append(point_value, current_step, action)
+                player_data[k1] = DataValue(action[0].shape[0])
+                player_data[k1].append(point_value, current_step, action[0])
     return player_data
 
 

@@ -10,7 +10,10 @@ import gym
 
 from lux_ai import tools, tfrecords_storage
 # from lux_ai.dm_reverb_storage import send_data
-from lux_gym.envs.lux.action_vectors import action_vector, action_vector_ct, actions_number
+from lux_gym.envs.lux.action_vectors_new import worker_action_vector, cart_action_vector
+from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors, empty_cart_action_vectors
+from lux_gym.envs.lux.action_vectors_new import dir_action_vector, res_action_vector
+from lux_gym.envs.lux.action_vectors_new import action_vector_ct
 import lux_gym.envs.tools as env_tools
 
 physical_devices = tf.config.list_physical_devices('GPU')
@@ -91,63 +94,84 @@ def scrape(env_name, data, team_name=None, only_wins=False):
         for action in player_actions:
             action_list = action.split(" ")
             # units
-            if action_list[0] == "m":  # "m {id} {direction}"
+            action_type = action_list[0]
+            if action_type == "m":  # "m {id} {direction}"
                 unit_name = action_list[1]  # "{id}"
                 direction = action_list[2]
+                if direction == "c":
+                    action_type = "idle"
                 try:
                     unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
                 except KeyError:  # it occurs when there is not valid action proposed
                     continue
-                action_vector_name = f"{unit_type}_m{direction}"  # "{unit_type}_m{direction}"
                 if unit_type == "w":
-                    actions_dict["workers"][unit_name] = action_vector[action_vector_name]
+                    action_vectors = empty_worker_action_vectors.copy()
+                    action_vectors[0] = worker_action_vector[action_type]
+                    if action_type != "idle":
+                        action_vectors[1] = dir_action_vector[direction]
+                    actions_dict["workers"][unit_name] = action_vectors
                 else:
-                    actions_dict["carts"][unit_name] = action_vector[action_vector_name]
-            elif action_list[0] == "t":  # "t {id} {dest_id} {resourceType} {amount}"
+                    action_vectors = empty_cart_action_vectors.copy()
+                    action_vectors[0] = cart_action_vector[action_type]
+                    if action_type != "idle":
+                        action_vectors[1] = dir_action_vector[direction]
+                    actions_dict["carts"][unit_name] = action_vectors
+            elif action_type == "t":  # "t {id} {dest_id} {resourceType} {amount}"
                 unit_name = action_list[1]
                 dest_name = action_list[2]
-                resourceType = action_list[3]
+                resource_type = action_list[3]
                 try:
                     unit_type = "w" if player_units_dict_active[unit_name].is_worker() else "c"
                 except KeyError:  # these is no such active unit to take action
                     continue
-                action_vector_name = f"{unit_type}_mc"  # REPLACEMENT
-                # try:
-                #     direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
-                #                                                                          dest_name].pos)
-                #     action_vector_name = f"{unit_type}_t{direction}{resourceType}"
-                # except KeyError:  # there is no such destination unit
-                #     action_vector_name = f"{unit_type}_mc"
+                try:
+                    direction = player_units_dict_active[unit_name].pos.direction_to(player_units_dict_all[
+                                                                                         dest_name].pos)
+                except KeyError:  # there is no such destination unit
+                    action_type = "idle"
+                    direction = None
                 if unit_type == "w":
-                    actions_dict["workers"][unit_name] = action_vector[action_vector_name]
+                    action_vectors = empty_worker_action_vectors.copy()
+                    action_vectors[0] = worker_action_vector[action_type]
+                    if action_type == "t":
+                        action_vectors[1] = dir_action_vector[direction]
+                        action_vectors[2] = res_action_vector[resource_type]
+                    actions_dict["workers"][unit_name] = action_vectors
                 else:
-                    actions_dict["carts"][unit_name] = action_vector[action_vector_name]
-            elif action_list[0] == "bcity":  # "bcity {id}"
+                    action_vectors = empty_cart_action_vectors.copy()
+                    action_vectors[0] = cart_action_vector[action_type]
+                    if action_type == "t":
+                        action_vectors[1] = dir_action_vector[direction]
+                        action_vectors[2] = res_action_vector[resource_type]
+                    actions_dict["carts"][unit_name] = action_vectors
+            elif action_type == "bcity":  # "bcity {id}"
                 unit_name = action_list[1]
-                action_vector_name = "w_build"
-                actions_dict["workers"][unit_name] = action_vector[action_vector_name]
-            elif action_list[0] == "p":  # "p {id}"
+                action_vectors = empty_worker_action_vectors.copy()
+                action_vectors[0] = worker_action_vector[action_type]
+                actions_dict["workers"][unit_name] = action_vectors
+            elif action_type == "p":  # "p {id}"
+                action_type = "idle"  # REPLACEMENT
                 unit_name = action_list[1]
-                # action_vector_name = "w_pillage"
-                action_vector_name = "w_mc"  # REPLACEMENT
-                actions_dict["workers"][unit_name] = action_vector[action_vector_name]
+                action_vectors = empty_worker_action_vectors.copy()
+                action_vectors[0] = worker_action_vector[action_type]
+                actions_dict["workers"][unit_name] = action_vectors
             # city tiles
-            elif action_list[0] == "r":  # "r {pos.x} {pos.y}"
+            elif action_type == "r":  # "r {pos.x} {pos.y}"
                 x, y = int(action_list[1]), int(action_list[2])
                 unit_name = f"ct_{y + shift}_{x + shift}"
                 action_vector_name = "ct_research"
                 actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
-            elif action_list[0] == "bw":  # "bw {pos.x} {pos.y}"
+            elif action_type == "bw":  # "bw {pos.x} {pos.y}"
                 x, y = int(action_list[1]), int(action_list[2])
                 unit_name = f"ct_{y + shift}_{x + shift}"
                 action_vector_name = "ct_build_worker"
                 actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
-            elif action_list[0] == "bc":  # "bc {pos.x} {pos.y}"
+            elif action_type == "bc":  # "bc {pos.x} {pos.y}"
                 x, y = int(action_list[1]), int(action_list[2])
                 unit_name = f"ct_{y + shift}_{x + shift}"
                 action_vector_name = "ct_build_cart"
                 actions_dict["city_tiles"][unit_name] = action_vector_ct[action_vector_name]
-            elif action_list[0] == "idle":  # "idle {pos.x} {pos.y}"
+            elif action_type == "idle":  # "idle {pos.x} {pos.y}"
                 x, y = int(action_list[1]), int(action_list[2])
                 unit_name = f"ct_{y + shift}_{x + shift}"
                 action_vector_name = "ct_idle"
@@ -339,7 +363,7 @@ class Agent(abc.ABC):
             # num_collectors: a total amount of collectors
         """
         # self._n_players = 2
-        self._actions_number = actions_number
+        self._actions_number = None
         self._env_name = config["environment"]
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])

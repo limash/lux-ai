@@ -1,13 +1,13 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "imitate",
+    "setup": "scrape",
     "model_name": "actor_critic_efficient",
     "n_points": 40,
 }
 
 CONF_Scraper = {
     "lux_version": "3.1.0",
-    "scrape_type": "multi",
+    "scrape_type": "single",
     "is_for_rl": False,
     "team_name": "Toad Brigade",
     "only_wins": False,
