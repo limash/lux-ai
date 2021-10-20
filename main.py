@@ -5,7 +5,7 @@ import random
 # import reverb
 
 from lux_ai import dm_reverb_storage, collector, scraper, trainer, tools
-from lux_gym.envs.lux.action_vectors import actions_number
+from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 from run_configuration import CONF_Scraper, CONF_RL, CONF_Main, CONF_Imitate
 
 main_config = CONF_Main
@@ -44,7 +44,8 @@ def scrape():
         scraper_agent = scraper.Agent(config)
         scraper_agent.scrape_all()
     elif config["scrape_type"] == "multi":
-        parallel_calls = 8
+        parallel_calls = 2
+        actions_shape = [item.shape for item in empty_worker_action_vectors]
         env_name = config["environment"]
         feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         lux_version = config["lux_version"]
@@ -66,7 +67,7 @@ def scrape():
             scraper_object = ray.remote(scraper.scrape_file)
             futures = [scraper_object.remote(env_name, file_names[j], team_name,
                                              already_saved_files, lux_version, only_wins,
-                                             feature_maps_shape, actions_number, i)
+                                             feature_maps_shape, actions_shape, i)
                        for j in range(len(file_names))]
             _ = ray.get(futures)
             ray.shutdown()

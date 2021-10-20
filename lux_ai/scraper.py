@@ -322,7 +322,7 @@ def scrape(env_name, data, team_name=None, only_wins=False):
 
 def scrape_file(env_name, file_name, team_name,
                 already_saved_files, lux_version, only_wins,
-                feature_maps_shape, acts_number, record_number):
+                feature_maps_shape, acts_shape, record_number):
     with open(file_name, "r") as read_file:
         raw_name = pathlib.Path(file_name).stem
         if f"./data/tfrecords/imitator/train/{raw_name}_{team_name}.tfrec" in already_saved_files:
@@ -342,7 +342,7 @@ def scrape_file(env_name, file_name, team_name,
         print(f"File {file_name}; {record_number}; recording.")
 
     tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
-                             feature_maps_shape, acts_number, record_number,
+                             feature_maps_shape, acts_shape, record_number,
                              raw_name + "_" + team_name)
 
 
