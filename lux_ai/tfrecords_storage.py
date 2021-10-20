@@ -256,19 +256,30 @@ def left_right(obs, probs):
     return obs, probs
 
 
-def random_reverse(observations, actions_probs, total_rewards):
-    # observations = tf.cast(observations, dtype=tf.float32)
-    # actions_probs = [tf.cast(item, dtype=tf.float32) for item in actions_probs]
-    # total_rewards = tf.cast(total_rewards, dtype=tf.float32)
-    trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
+def do_nothing(obs, probs):
+    return obs, probs
+
+
+def random_reverse(observations, inputs):
+    act_probs, dir_probs, res_probs, reward = inputs
+    probs = [act_probs, dir_probs, res_probs]
+
+    # trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
+    trigger = np.random.choice(np.array([0, 1, 2, 3]))
+
+    # observations, probs = tf.cond(tf.equal(trigger, tf.constant(1, dtype=tf.int32)),
+    #                               lambda: up_down(observations, probs),
+    #                               lambda: do_nothing(observations, probs))
     if trigger == 1:
-        observations, actions_probs = up_down(observations, actions_probs)
+        observations, probs = up_down(observations, probs)
     elif trigger == 2:
-        observations, actions_probs = left_right(observations, actions_probs)
+        observations, probs = left_right(observations, probs)
     elif trigger == 3:
-        observations, actions_probs = up_down(observations, actions_probs)
-        observations, actions_probs = left_right(observations, actions_probs)
-    return observations, (actions_probs, total_rewards)
+        observations, probs = up_down(observations, probs)
+        observations, probs = left_right(observations, probs)
+
+    act_probs, dir_probs, res_probs = probs
+    return observations, (act_probs, dir_probs, res_probs, reward)
 
 
 def split_movement_actions(observation, inputs):
@@ -332,14 +343,15 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
-    #     foo = split_movement_actions(foo)
-    #     # foo = random_reverse(*foo)
+    #     foo = random_reverse(*foo)
+    #     foo = split_movement_actions(*foo)
     #     count += 1
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
     ds = ds.shuffle(10000)
     return ds
