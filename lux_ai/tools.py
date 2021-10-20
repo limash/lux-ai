@@ -19,33 +19,48 @@ def squeeze_transform(obs_base, acts_rews):
 
 
 def skewed_kldivergence_loss():
-    def loss_function(y_true, y_pred):
-        one = tf.constant(1.)
-        # class_sums = tf.reduce_sum(y_true, axis=0)
-        # movements_mean = tf.reduce_mean(class_sums[:4])
-        # center_multiplier = movements_mean / class_sums[4]
-        # if not tf.math.is_finite(center_multiplier):
-        #     center_multiplier = one
-        # build_multiplier = movements_mean / class_sums[5]
-        # if not tf.math.is_finite(build_multiplier):
-        #     build_multiplier = one
-        center_multiplier = tf.constant(0.1)
-        build_multiplier = tf.constant(2.)
-
-        class_weights = tf.stack([one, one, one, one, center_multiplier, build_multiplier], axis=0)
-        class_weights = tf.expand_dims(class_weights, axis=0)
-
+    def base_loss(y_true, y_pred, class_weights):
         y_pred = tf.convert_to_tensor(y_pred)
         y_true = tf.cast(y_true, y_pred.dtype)
         y_true = backend.clip(y_true, backend.epsilon(), 1)
         y_pred = backend.clip(y_pred, backend.epsilon(), 1)
-        # temp = y_true * tf.math.log(y_true / y_pred)
-        # temp_v = temp.numpy()
-        # temp_sum = tf.reduce_sum(temp, axis=-1)
-        # result = temp * class_weight
-        # result_v = result.numpy()
-        # result_sum = tf.reduce_sum(result, axis=-1)
         return tf.reduce_sum(class_weights * y_true * tf.math.log(y_true / y_pred), axis=-1)
+
+    def loss_function(y_true, y_pred):
+        y_true_gen = y_true[0]
+        y_true_dir = y_true[1]
+        y_true_res = y_true[2]
+        y_pred_gen = y_pred[0]
+        y_pred_dir = y_pred[1]
+        y_pred_res = y_pred[2]
+
+        one = tf.constant(1.)
+        transfer_multiplier = tf.constant(3.)
+        idle_multiplier = tf.constant(0.5)
+        build_multiplier = tf.constant(3.)
+
+        class_weights0 = tf.stack([one, transfer_multiplier, idle_multiplier, build_multiplier], axis=0)
+        class_weights0 = tf.expand_dims(class_weights0, axis=0)
+        loss0 = base_loss(y_true_gen, y_pred_gen, class_weights0)
+
+        dir_idx = tf.squeeze(tf.where(tf.reduce_sum(y_true_dir, axis=1) != 0))
+        y_true_dir_gathered = tf.gather(y_true_dir, indices=dir_idx)
+        y_pred_dir_gathered = tf.gather(y_pred_dir, indices=dir_idx)
+        class_weights1 = tf.stack([one, one, one, one], axis=0)
+        class_weights1 = tf.expand_dims(class_weights1, axis=0)
+        loss1_base = base_loss(y_true_dir_gathered, y_pred_dir_gathered, class_weights1)
+        loss1 = tf.scatter_nd(indices=tf.expand_dims(dir_idx, axis=-1), updates=loss1_base, shape=loss0.shape)
+
+        res_idx = tf.squeeze(tf.where(tf.reduce_sum(y_true_res, axis=1) != 0))
+        y_true_res_gathered = tf.gather(y_true_res, indices=res_idx)
+        y_pred_res_gathered = tf.gather(y_pred_res, indices=res_idx)
+        class_weights2 = tf.stack([one, one, one], axis=0)
+        class_weights2 = tf.expand_dims(class_weights2, axis=0)
+        loss2_base = base_loss(y_true_res_gathered, y_pred_res_gathered, class_weights2)
+        loss2 = tf.scatter_nd(indices=tf.expand_dims(res_idx, axis=-1), updates=loss2_base, shape=loss0.shape)
+
+        loss = loss0 + loss1 + loss2
+        return loss
 
     return loss_function
 

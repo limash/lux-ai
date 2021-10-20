@@ -62,16 +62,17 @@ class Agent(abc.ABC):
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        for sample in ds_train.take(10):
-            # sample = tools.squeeze_transform(*sample)
-            observations = sample[0].numpy()
-            actions_probs = sample[1][0][0].numpy()
-            total_rewards = sample[1][1].numpy()
-            probs_output, value_output = self._model(observations)
-            probs_output_v = probs_output[0].numpy()
-            value_output_v = value_output.numpy()
-            skewed_loss = self._loss_function(sample[1][0], probs_output)
-            loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+        # loss_function = tf.function(self._loss_function)
+        # for sample in ds_train.take(10):
+        #     # sample = tools.squeeze_transform(*sample)
+        #     observations = sample[0].numpy()
+        #     actions_probs = sample[1][0][0].numpy()
+        #     total_rewards = sample[1][1].numpy()
+        #     probs_output, value_output = self._model(observations)
+        #     probs_output_v = probs_output[0].numpy()
+        #     value_output_v = value_output.numpy()
+        #     skewed_loss = self._loss_function(sample[1][0], probs_output)
+        #     # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
         # early_stop_callback = tf.keras.callbacks.EarlyStopping(
@@ -86,11 +87,11 @@ class Agent(abc.ABC):
                 "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
                 "output_2": None  # tf.keras.losses.MeanSquaredError()
             },
-            metrics={
-                "output_1": [tf.keras.metrics.CategoricalAccuracy()],
-                # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
-                #                  tf.keras.metrics.MeanAbsoluteError()]
-            },
+            # metrics={
+            #     "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+            #     # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
+            #     #                  tf.keras.metrics.MeanAbsoluteError()]
+            # },
             # loss_weights={"output_1": 2.0}  # ,
             # "output_2": 0.1},
         )
