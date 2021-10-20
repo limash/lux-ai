@@ -237,31 +237,29 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
 
 
 def up_down(obs, probs):
-    obs_out = tf.reverse(obs, [0])
-    if probs[0] == 1:
-        probs_out = tf.constant([0, 0, 1, 0, 0, 0], dtype=tf.float32)
-    elif probs[2] == 1:
-        probs_out = tf.constant([1, 0, 0, 0, 0, 0], dtype=tf.float32)
-    else:
-        probs_out = probs
-    return obs_out, probs_out
+    obs = tf.reverse(obs, [0])
+    if probs[0][0] == 1 or probs[0][1] == 1:
+        if probs[1][0] == 1:
+            probs[1] = tf.constant([0, 0, 1, 0], dtype=tf.float32)
+        elif probs[1][2] == 1:
+            probs[1] = tf.constant([1, 0, 0, 0], dtype=tf.float32)
+    return obs, probs
 
 
 def left_right(obs, probs):
-    obs_out = tf.reverse(obs, [1])
-    if probs[1] == 1:
-        probs_out = tf.constant([0, 0, 0, 1, 0, 0], dtype=tf.float32)
-    elif probs[3] == 1:
-        probs_out = tf.constant([0, 1, 0, 0, 0, 0], dtype=tf.float32)
-    else:
-        probs_out = probs
-    return obs_out, probs_out
+    obs = tf.reverse(obs, [1])
+    if probs[0][0] == 1 or probs[0][1] == 1:
+        if probs[1][1] == 1:
+            probs[1] = tf.constant([0, 0, 0, 1], dtype=tf.float32)
+        elif probs[1][3] == 1:
+            probs[1] = tf.constant([0, 1, 0, 0], dtype=tf.float32)
+    return obs, probs
 
 
 def random_reverse(observations, actions_probs, total_rewards):
-    observations = tf.cast(observations, dtype=tf.float32)
-    actions_probs = tf.cast(actions_probs, dtype=tf.float32)
-    total_rewards = tf.cast(total_rewards, dtype=tf.float32)
+    # observations = tf.cast(observations, dtype=tf.float32)
+    # actions_probs = [tf.cast(item, dtype=tf.float32) for item in actions_probs]
+    # total_rewards = tf.cast(total_rewards, dtype=tf.float32)
     trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
     if trigger == 1:
         observations, actions_probs = up_down(observations, actions_probs)
@@ -270,13 +268,6 @@ def random_reverse(observations, actions_probs, total_rewards):
     elif trigger == 3:
         observations, actions_probs = up_down(observations, actions_probs)
         observations, actions_probs = left_right(observations, actions_probs)
-    return observations, (actions_probs, total_rewards)
-
-
-def rearrange(observations, actions_probs, total_rewards):
-    observations = tf.cast(observations, dtype=tf.float32)
-    actions_probs = tf.cast(actions_probs, dtype=tf.float32)
-    total_rewards = tf.cast(total_rewards, dtype=tf.float32)
     return observations, (actions_probs, total_rewards)
 
 
@@ -302,20 +293,25 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
         observation = tf.io.deserialize_many_sparse(observation, dtype=tf.float16)
         observation = tf.sparse.to_dense(observation)
         observation = tf.squeeze(observation)
+        observation = tf.cast(observation, dtype=tf.float32)
         observation.set_shape(feature_maps_shape)
         # action_mask = tf.io.parse_tensor(example["action_mask"], tf.float16)
         # action_mask.set_shape(actions_shape)
         action_probs_1 = tf.io.parse_tensor(example["action_probs_1"], tf.float16)
+        action_probs_1 = tf.cast(action_probs_1, dtype=tf.float32)
         action_probs_1.set_shape(actions_shape[0][0])
         action_probs_2 = tf.io.parse_tensor(example["action_probs_2"], tf.float16)
+        action_probs_2 = tf.cast(action_probs_2, dtype=tf.float32)
         action_probs_2.set_shape(actions_shape[1][0])
         action_probs_3 = tf.io.parse_tensor(example["action_probs_3"], tf.float16)
+        action_probs_3 = tf.cast(action_probs_3, dtype=tf.float32)
         action_probs_3.set_shape(actions_shape[2][0])
         action_probs = (action_probs_1, action_probs_2, action_probs_3)
         reward = example["reward"]
         reward.set_shape(())
+        reward = tf.cast(reward, dtype=tf.float32)
 
-        return observation, action_probs, reward
+        return observation, (action_probs, reward)
 
     option_no_order = tf.data.Options()
     option_no_order.experimental_deterministic = False
@@ -324,14 +320,15 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
+    #     foo = rearrange(*foo)
+    #     # foo = random_reverse(*foo)
     #     count += 1
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    ds = ds.map(random_reverse, num_parallel_calls=AUTO)
-    # ds = ds.map(rearrange, num_parallel_calls=AUTO)
+    # ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     ds = ds.shuffle(10000)
     return ds
 

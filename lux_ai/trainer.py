@@ -62,16 +62,16 @@ class Agent(abc.ABC):
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        # for sample in ds_train.take(10):
-        #     # sample = tools.squeeze_transform(*sample)
-        #     observations = sample[0].numpy()
-        #     actions_probs = sample[1][0].numpy()
-        #     total_rewards = sample[1][1].numpy()
-        #     probs_output, value_output = self._model(observations)
-        #     probs_output_v = probs_output.numpy()
-        #     value_output_v = value_output.numpy()
-        #     skewed_loss = self._loss_function(sample[1][0], probs_output)
-        #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+        for sample in ds_train.take(10):
+            # sample = tools.squeeze_transform(*sample)
+            observations = sample[0].numpy()
+            actions_probs = sample[1][0][0].numpy()
+            total_rewards = sample[1][1].numpy()
+            probs_output, value_output = self._model(observations)
+            probs_output_v = probs_output[0].numpy()
+            value_output_v = value_output.numpy()
+            skewed_loss = self._loss_function(sample[1][0], probs_output)
+            loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
         # early_stop_callback = tf.keras.callbacks.EarlyStopping(
