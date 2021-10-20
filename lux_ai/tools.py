@@ -51,10 +51,17 @@ class LossFunction2(tf.keras.losses.Loss):
 
     def call(self, y_true, y_pred):
         dir_idx = tf.squeeze(tf.where(tf.reduce_sum(y_true, axis=1) != 0))
-        y_true_dir_gathered = tf.gather(y_true, indices=dir_idx)
-        y_pred_dir_gathered = tf.gather(y_pred, indices=dir_idx)
+
+        # y_true_dir_gathered = tf.gather(y_true, indices=dir_idx)
+        # y_pred_dir_gathered = tf.gather(y_pred, indices=dir_idx)
+        # from https://stackoverflow.com/questions/45882401
+        partitions = tf.reduce_sum(tf.one_hot(dir_idx, tf.shape(y_true)[0], dtype='int32'), 0)
+        y_true_dir_gathered = tf.dynamic_partition(y_true, partitions, 2)[1]
+        y_pred_dir_gathered = tf.dynamic_partition(y_pred, partitions, 2)[1]
+
         loss_base = base_loss(y_true_dir_gathered, y_pred_dir_gathered, self._class_weights)
-        loss = tf.scatter_nd(indices=tf.expand_dims(dir_idx, axis=-1), updates=loss_base, shape=self._batch_size)
+        # loss = tf.scatter_nd(indices=tf.expand_dims(dir_idx, axis=-1), updates=loss_base, shape=self._batch_size)
+        loss = loss_base
         return loss
 
 
@@ -68,10 +75,16 @@ class LossFunction3(tf.keras.losses.Loss):
 
     def call(self, y_true, y_pred):
         res_idx = tf.squeeze(tf.where(tf.reduce_sum(y_true, axis=1) != 0))
-        y_true_res_gathered = tf.gather(y_true, indices=res_idx)
-        y_pred_res_gathered = tf.gather(y_pred, indices=res_idx)
+
+        # y_true_res_gathered = tf.gather(y_true, indices=res_idx)
+        # y_pred_res_gathered = tf.gather(y_pred, indices=res_idx)
+        partitions = tf.reduce_sum(tf.one_hot(res_idx, tf.shape(y_true)[0], dtype='int32'), 0)
+        y_true_res_gathered = tf.dynamic_partition(y_true, partitions, 2)[1]
+        y_pred_res_gathered = tf.dynamic_partition(y_pred, partitions, 2)[1]
+
         loss_base = base_loss(y_true_res_gathered, y_pred_res_gathered, self._class_weights)
-        loss = tf.scatter_nd(indices=tf.expand_dims(res_idx, axis=-1), updates=loss_base, shape=self._batch_size)
+        # loss = tf.scatter_nd(indices=tf.expand_dims(res_idx, axis=-1), updates=loss_base, shape=self._batch_size)
+        loss = loss_base
         return loss
 
 

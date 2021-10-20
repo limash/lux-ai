@@ -76,7 +76,6 @@ class Agent(abc.ABC):
         #     skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
         #     skewed_loss2 = self._loss_function2(sample[1][1], probs_output1)
         #     skewed_loss3 = self._loss_function3(sample[1][2], probs_output2)
-        #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
         # early_stop_callback = tf.keras.callbacks.EarlyStopping(
