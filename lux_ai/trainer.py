@@ -43,7 +43,8 @@ class Agent(abc.ABC):
         # self._class_weights = tf.expand_dims(class_weights, axis=0)
         # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
         self._loss_function1 = tools.LossFunction1()
-        self._loss_function2 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
+        self._loss_function2_0 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
+        self._loss_function2_1 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
         self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
 
         if data is not None:
@@ -69,13 +70,15 @@ class Agent(abc.ABC):
         #     actions_probs0 = sample[1][0].numpy()
         #     actions_probs1 = sample[1][1].numpy()
         #     actions_probs2 = sample[1][2].numpy()
-        #     total_rewards = sample[1][3].numpy()
-        #     probs_output0, probs_output1, probs_output2, value_output = self._model(observations)
+        #     actions_probs3 = sample[1][3].numpy()
+        #     total_rewards = sample[1][4].numpy()
+        #     probs_output0, probs_output1, probs_output2, probs_output3, value_output = self._model(observations)
         #     probs_output_v = probs_output0.numpy()
         #     value_output_v = value_output.numpy()
         #     skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
-        #     skewed_loss2 = self._loss_function2(sample[1][1], probs_output1)
-        #     skewed_loss3 = self._loss_function3(sample[1][2], probs_output2)
+        #     skewed_loss2 = self._loss_function2_0(sample[1][1], probs_output1)
+        #     skewed_loss3 = self._loss_function2_1(sample[1][2], probs_output2)
+        #     skewed_loss4 = self._loss_function3(sample[1][3], probs_output3)
 
         # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
         # early_stop_callback = tf.keras.callbacks.EarlyStopping(
@@ -88,9 +91,10 @@ class Agent(abc.ABC):
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
             loss={
                 "output_1": self._loss_function1,
-                "output_2": self._loss_function2,
-                "output_3": self._loss_function3,
-                "output_4": None  # tf.keras.losses.MeanSquaredError()
+                "output_2": self._loss_function2_0,
+                "output_3": self._loss_function2_1,
+                "output_4": self._loss_function3,
+                "output_5": None  # tf.keras.losses.MeanSquaredError()
             },
             # metrics={
             #     "output_1": [tf.keras.metrics.CategoricalAccuracy()],

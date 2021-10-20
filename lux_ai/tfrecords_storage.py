@@ -271,6 +271,18 @@ def random_reverse(observations, actions_probs, total_rewards):
     return observations, (actions_probs, total_rewards)
 
 
+def split_movement_actions(observation, inputs):
+    action_probs_1, action_probs_2, action_probs_3, reward = inputs
+    zeros = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+    if action_probs_1[0] == 1:  # movement action
+        # action type, movement direction, transfer direction, resource to transfer, reward
+        return observation, (action_probs_1, action_probs_2, zeros, action_probs_3, reward)
+    elif action_probs_1[1] == 1:  # transfer action
+        return observation, (action_probs_1, zeros, action_probs_2, action_probs_3, reward)
+    else:
+        return observation, (action_probs_1, zeros, zeros, action_probs_3, reward)
+
+
 def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
@@ -320,7 +332,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
-    #     foo = rearrange(*foo)
+    #     foo = split_movement_actions(foo)
     #     # foo = random_reverse(*foo)
     #     count += 1
 
@@ -328,7 +340,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    # ds = ds.map(random_reverse, num_parallel_calls=AUTO)
+    ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
     ds = ds.shuffle(10000)
     return ds
 
