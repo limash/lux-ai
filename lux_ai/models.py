@@ -199,11 +199,11 @@ def actor_critic_efficient(actions_shape):
             probs1 = self._workers_probs1_0(w)
             probs2 = self._workers_probs1_1(w)
             probs3 = self._workers_probs1_2(w)
-            probs = (probs1, probs2, probs3)
+            # probs = (probs1, probs2, probs3)
 
             baseline = self._baseline(tf.concat([y, z], axis=1))
 
-            return probs, baseline
+            return probs1, probs2, probs3, baseline
 
         def get_config(self):
             pass

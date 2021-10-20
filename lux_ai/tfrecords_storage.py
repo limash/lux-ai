@@ -306,12 +306,12 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
         action_probs_3 = tf.io.parse_tensor(example["action_probs_3"], tf.float16)
         action_probs_3 = tf.cast(action_probs_3, dtype=tf.float32)
         action_probs_3.set_shape(actions_shape[2][0])
-        action_probs = (action_probs_1, action_probs_2, action_probs_3)
+        # action_probs = (action_probs_1, action_probs_2, action_probs_3)
         reward = example["reward"]
         reward.set_shape(())
         reward = tf.cast(reward, dtype=tf.float32)
 
-        return observation, (action_probs, reward)
+        return observation, (action_probs_1, action_probs_2, action_probs_3, reward)
 
     option_no_order = tf.data.Options()
     option_no_order.experimental_deterministic = False

@@ -35,13 +35,16 @@ class Agent(abc.ABC):
         dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
         self._model(dummy_input)
 
+        self._batch_size = config["batch_size"]
         # class_weights = np.ones(self._actions_shape, dtype=np.single)
         # class_weights[4] = 0.1
         # class_weights[5] = 2.
         # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
         # self._class_weights = tf.expand_dims(class_weights, axis=0)
         # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
-        self._loss_function = tools.skewed_kldivergence_loss()
+        self._loss_function1 = tools.LossFunction1()
+        self._loss_function2 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
+        self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -52,7 +55,6 @@ class Agent(abc.ABC):
         #     table=buffer_table_names[0],
         #     max_in_flight_samples_per_worker=2*config["batch_size"])
         # self._client = reverb.Client(f'localhost:{buffer_server_port}')
-        self._batch_size = config["batch_size"]
 
     def imitate(self):
         ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
@@ -62,17 +64,19 @@ class Agent(abc.ABC):
         ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
         # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
-        # loss_function = tf.function(self._loss_function)
         # for sample in ds_train.take(10):
-        #     # sample = tools.squeeze_transform(*sample)
         #     observations = sample[0].numpy()
-        #     actions_probs = sample[1][0][0].numpy()
-        #     total_rewards = sample[1][1].numpy()
-        #     probs_output, value_output = self._model(observations)
-        #     probs_output_v = probs_output[0].numpy()
+        #     actions_probs0 = sample[1][0].numpy()
+        #     actions_probs1 = sample[1][1].numpy()
+        #     actions_probs2 = sample[1][2].numpy()
+        #     total_rewards = sample[1][3].numpy()
+        #     probs_output0, probs_output1, probs_output2, value_output = self._model(observations)
+        #     probs_output_v = probs_output0.numpy()
         #     value_output_v = value_output.numpy()
-        #     skewed_loss = self._loss_function(sample[1][0], probs_output)
-        #     # loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
+        #     skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
+        #     skewed_loss2 = self._loss_function2(sample[1][1], probs_output1)
+        #     skewed_loss3 = self._loss_function3(sample[1][2], probs_output2)
+        #     loss = tf.keras.losses.kl_divergence(sample[1][0], probs_output)
 
         # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
         # early_stop_callback = tf.keras.callbacks.EarlyStopping(
@@ -82,10 +86,12 @@ class Agent(abc.ABC):
         # )
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),  # , clipnorm=4.),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
             loss={
-                "output_1": self._loss_function,  # tf.keras.losses.KLDivergence(),
-                "output_2": None  # tf.keras.losses.MeanSquaredError()
+                "output_1": self._loss_function1,
+                "output_2": self._loss_function2,
+                "output_3": self._loss_function3,
+                "output_4": None  # tf.keras.losses.MeanSquaredError()
             },
             # metrics={
             #     "output_1": [tf.keras.metrics.CategoricalAccuracy()],
