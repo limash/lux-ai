@@ -27,8 +27,8 @@ def actor_critic_residual(actions_shape):
         def __init__(self, actions_number, **kwargs):
             super().__init__(**kwargs)
 
-            filters = 200
-            layers = 10
+            filters = 128
+            layers = 12
 
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
             initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
@@ -39,19 +39,22 @@ def actor_critic_residual(actions_shape):
             self._activation = keras.layers.ReLU()
             self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
 
-            # self._depthwise = keras.layers.DepthwiseConv2D(32)
             self._depthwise = keras.layers.DepthwiseConv2D(13)
             self._flatten = keras.layers.Flatten()
 
-            # self._city_tiles_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-            # self._city_tiles_probs1 = keras.layers.Dense(4, activation="softmax",
-            #                                              kernel_initializer=initializer_random)
             self._workers_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-            self._workers_probs1 = keras.layers.Dense(actions_number, activation="softmax",
-                                                      kernel_initializer=initializer_random)
-            # self._carts_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-            # self._carts_probs1 = keras.layers.Dense(17, activation="softmax", kernel_initializer=initializer_random)
-
+            # action type
+            self._workers_probs1_0 = keras.layers.Dense(actions_number[0][0], activation="softmax",
+                                                        kernel_initializer=initializer_random)
+            # movement direction
+            self._workers_probs1_1 = keras.layers.Dense(actions_number[1][0], activation="softmax",
+                                                        kernel_initializer=initializer_random)
+            # transfer direction
+            self._workers_probs1_2 = keras.layers.Dense(actions_number[1][0], activation="softmax",
+                                                        kernel_initializer=initializer_random)
+            # resource to transfer
+            self._workers_probs1_3 = keras.layers.Dense(actions_number[2][0], activation="softmax",
+                                                        kernel_initializer=initializer_random)
             self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
                                                 activation=keras.activations.tanh)
 
@@ -78,19 +81,15 @@ def actor_critic_residual(actions_shape):
             z2 = self._flatten(z2)
             z = tf.concat([z1, z2], axis=1)
 
-            # t = self._city_tiles_probs0(z)
-            # t = self._city_tiles_probs1(t)
             w = self._workers_probs0(z)
-            w = self._workers_probs1(w)
-            # c = self._carts_probs0(z)
-            # c = self._carts_probs1(c)
-            # probs = tf.concat([t, w, c], axis=1)
-            # probs = probs * actions_mask
-            probs = w
+            probs0 = self._workers_probs1_0(w)
+            probs1 = self._workers_probs1_1(w)
+            probs2 = self._workers_probs1_2(w)
+            probs3 = self._workers_probs1_3(w)
 
             baseline = self._baseline(tf.concat([y, z], axis=1))
 
-            return probs, baseline
+            return probs0, probs1, probs2, probs3, baseline
 
         def get_config(self):
             pass
