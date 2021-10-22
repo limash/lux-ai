@@ -14,7 +14,7 @@ CONF_Scraper = {
 }
 
 CONF_Imitate = {
-    "batch_size": 800,
+    "batch_size": 300,
 }
 
 CONF_RL = {

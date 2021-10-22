@@ -84,8 +84,8 @@ def actor_critic_residual(actions_shape):
             super().__init__(**kwargs)
 
             filters = 128
-            stem_layers = 10
-            branch_layers = 2
+            # stem_layers = 0
+            branch_layers = 12
 
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
             initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
@@ -94,7 +94,7 @@ def actor_critic_residual(actions_shape):
             self._root = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer, use_bias=False)
             self._root_norm = keras.layers.BatchNormalization()
             self._root_activation = keras.layers.ReLU()
-            self._stem = [ResidualUnit(filters, initializer, activation) for _ in range(stem_layers)]
+            # self._stem = [ResidualUnit(filters, initializer, activation) for _ in range(stem_layers)]
 
             # action type
             self._action_type_branch = ActorBranch(filters, initializer, activation, branch_layers)
@@ -125,8 +125,8 @@ def actor_critic_residual(actions_shape):
             x = self._root_norm(x, training=training)
             x = self._root_activation(x)
 
-            for layer in self._stem:
-                x = layer(x, training=training)
+            # for layer in self._stem:
+            #     x = layer(x, training=training)
 
             center = features[:, :, :, :1]
             z = (x, center)
