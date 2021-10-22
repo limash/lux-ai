@@ -62,7 +62,7 @@ class Agent(abc.ABC):
                                                                "data/tfrecords/imitator/train/")
         # ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
         #                                                        "data/tfrecords/imitator/validation/")
-        ds_train = ds_train.batch(self._batch_size)  # , drop_remainder=True)
+        ds_train = ds_train.batch(self._batch_size).prefetch(1)  # , drop_remainder=True)
         # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in ds_train.take(10):
@@ -74,7 +74,6 @@ class Agent(abc.ABC):
         #     total_rewards = sample[1][4].numpy()
         #     probs_output0, probs_output1, probs_output2, probs_output3, value_output = self._model(observations)
         #     probs_output_v = probs_output0.numpy()
-        #     value_output_v = value_output.numpy()
         #     skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
         #     skewed_loss2 = self._loss_function2_0(sample[1][1], probs_output1)
         #     skewed_loss3 = self._loss_function2_1(sample[1][2], probs_output2)
@@ -90,10 +89,10 @@ class Agent(abc.ABC):
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
             loss={
-                "output_1": None,  # self._loss_function1,
+                "output_1": self._loss_function1,
                 "output_2": self._loss_function2_0,
-                "output_3": None,  # self._loss_function2_1,
-                "output_4": None,  # self._loss_function3,
+                "output_3": self._loss_function2_1,
+                "output_4": self._loss_function3,
                 "output_5": None  # tf.keras.losses.MeanSquaredError()
             },
             # metrics={
