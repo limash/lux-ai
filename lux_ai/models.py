@@ -42,17 +42,20 @@ def actor_critic_residual(actions_shape):
             self._depthwise = keras.layers.DepthwiseConv2D(13)
             self._flatten = keras.layers.Flatten()
 
-            self._workers_probs0 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             # action type
+            self._workers_probs0_1 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._workers_probs1_0 = keras.layers.Dense(actions_number[0][0], activation="softmax",
                                                         kernel_initializer=initializer_random)
             # movement direction
+            self._workers_probs0_1_1 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._workers_probs1_1 = keras.layers.Dense(actions_number[1][0], activation="softmax",
                                                         kernel_initializer=initializer_random)
             # transfer direction
+            self._workers_probs0_1_2 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._workers_probs1_2 = keras.layers.Dense(actions_number[1][0], activation="softmax",
                                                         kernel_initializer=initializer_random)
             # resource to transfer
+            self._workers_probs0_1_3 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
             self._workers_probs1_3 = keras.layers.Dense(actions_number[2][0], activation="softmax",
                                                         kernel_initializer=initializer_random)
             self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
@@ -81,11 +84,17 @@ def actor_critic_residual(actions_shape):
             z2 = self._flatten(z2)
             z = tf.concat([z1, z2], axis=1)
 
-            w = self._workers_probs0(z)
-            probs0 = self._workers_probs1_0(w)
-            probs1 = self._workers_probs1_1(w)
-            probs2 = self._workers_probs1_2(w)
-            probs3 = self._workers_probs1_3(w)
+            w1 = self._workers_probs0_1(z)
+            probs0 = self._workers_probs1_0(w1)
+
+            w2 = self._workers_probs0_1_1(z)
+            probs1 = self._workers_probs1_1(w2)
+
+            w3 = self._workers_probs0_1_2(z)
+            probs2 = self._workers_probs1_2(w3)
+
+            w4 = self._workers_probs0_1_3(z)
+            probs3 = self._workers_probs1_3(w4)
 
             baseline = self._baseline(tf.concat([y, z], axis=1))
 

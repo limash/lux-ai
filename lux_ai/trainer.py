@@ -90,10 +90,10 @@ class Agent(abc.ABC):
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
             loss={
-                "output_1": self._loss_function1,
+                "output_1": None,  # self._loss_function1,
                 "output_2": self._loss_function2_0,
-                "output_3": self._loss_function2_1,
-                "output_4": self._loss_function3,
+                "output_3": None,  # self._loss_function2_1,
+                "output_4": None,  # self._loss_function3,
                 "output_5": None  # tf.keras.losses.MeanSquaredError()
             },
             # metrics={
