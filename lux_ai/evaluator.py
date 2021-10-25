@@ -18,7 +18,7 @@ class Agent(abc.ABC):
     def evaluate(self):
         summary = [0, 0]
 
-        environment = kaggle.make("lux_ai_2021", configuration={"loglevel": 2}, debug=True)
+        environment = kaggle.make("lux_ai_2021", configuration={"loglevel": 2}, debug=False)
         steps = environment.run([self._compare_agent, self._agent])
         if steps[-1][0]['reward'] > steps[-1][1]['reward']:
             summary[0] += 1

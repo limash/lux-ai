@@ -14,7 +14,7 @@ CONF_Scrape = {
 }
 
 CONF_Evaluate = {
-    "compare_agent": "title_agent",
+    "compare_agent": "compare_agent",
 }
 
 CONF_Imitate = {
