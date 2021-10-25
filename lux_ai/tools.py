@@ -30,8 +30,8 @@ class LossFunction1(tf.keras.losses.Loss):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         one = tf.constant(1.)
-        transfer_multiplier = tf.constant(3.)
-        idle_multiplier = tf.constant(0.5)
+        transfer_multiplier = tf.constant(2.)
+        idle_multiplier = tf.constant(0.1)
         build_multiplier = tf.constant(3.)
         class_weights = tf.stack([one, transfer_multiplier, idle_multiplier, build_multiplier], axis=0)
         self._class_weights = tf.expand_dims(class_weights, axis=0)

@@ -60,10 +60,10 @@ class Agent(abc.ABC):
     def imitate(self):
         ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/train/")
-        # ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
-        #                                                        "data/tfrecords/imitator/validation/")
+        ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
+                                                               "data/tfrecords/imitator/validation/")
         ds_train = ds_train.batch(self._batch_size).prefetch(1)  # , drop_remainder=True)
-        # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
+        ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in ds_train.take(10):
         #     observations = sample[0].numpy()
@@ -79,15 +79,15 @@ class Agent(abc.ABC):
         #     skewed_loss3 = self._loss_function2_1(sample[1][2], probs_output2)
         #     skewed_loss4 = self._loss_function3(sample[1][3], probs_output3)
 
-        # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=1, verbose=1)
+        # lr_scheduler = tf.keras.callbacks.ReduceLROnPlateau(factor=0.5, patience=2, verbose=1)
         # early_stop_callback = tf.keras.callbacks.EarlyStopping(
-        #     monitor='val_loss',
-        #     patience=2,
-        #     restore_best_weights=True,
+        #     monitor='val_output_1_loss',
+        #     patience=10,
+        #     restore_best_weights=False,
         # )
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
             loss={
                 "output_1": self._loss_function1,
                 "output_2": self._loss_function2_0,
@@ -95,17 +95,20 @@ class Agent(abc.ABC):
                 "output_4": self._loss_function3,
                 "output_5": None  # tf.keras.losses.MeanSquaredError()
             },
-            # metrics={
-            #     "output_1": [tf.keras.metrics.CategoricalAccuracy()],
-            #     # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
-            #     #                  tf.keras.metrics.MeanAbsoluteError()]
-            # },
+            metrics={
+                "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+                # "output_2": [tf.keras.metrics.CategoricalAccuracy()],
+                # "output_3": [tf.keras.metrics.CategoricalAccuracy()],
+                # "output_4": [tf.keras.metrics.CategoricalAccuracy()],
+                # "value_output": [tf.keras.metrics.MeanAbsolutePercentageError(),
+                #                  tf.keras.metrics.MeanAbsoluteError()]
+            },
             # loss_weights={"output_1": 2.0}  # ,
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=1)
-        # , validation_data=ds_valid, callbacks=[early_stop_callback, lr_scheduler])
+        self._model.fit(ds_train, epochs=10, validation_data=ds_valid)
+        # , callbacks=[early_stop_callback, lr_scheduler])
         weights = self._model.get_weights()
         data = {
             'weights': weights,
