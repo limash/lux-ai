@@ -1,8 +1,8 @@
 import pickle
 import glob
 import random
-# from pathlib import Path
-# import reverb
+
+import ray
 
 from lux_ai import scraper, evaluator, trainer, tools
 from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
@@ -10,7 +10,6 @@ from run_configuration import CONF_Scrape, CONF_RL, CONF_Main, CONF_Imitate, CON
 
 
 def scrape():
-    import ray
 
     config = {**CONF_Main, **CONF_Scrape}
 
@@ -37,7 +36,7 @@ def scrape():
 
         for i, file_names in enumerate(zip(*sets)):
             print(f"Iteration {i} starts")
-            ray.init(num_cpus=parallel_calls)
+            ray.init(num_cpus=parallel_calls, include_dashboard=False)
             scraper_object = ray.remote(scraper.scrape_file)
             futures = [scraper_object.remote(env_name, file_names[j], team_name,
                                              already_saved_files, lux_version, only_wins,
@@ -58,9 +57,28 @@ def evaluate(input_data):
 
 
 def imitate(input_data):
-    config = {**CONF_Main, **CONF_Imitate}
-    trainer_agent = trainer.Agent(config, input_data)
-    trainer_agent.imitate()
+    config = {**CONF_Main, **CONF_Imitate, **CONF_Evaluate}
+
+    if config["with_evaluation"]:
+        ray.init(num_gpus=1, include_dashboard=False)
+        # remote objects creation
+        trainer_object = ray.remote(num_gpus=1)(trainer.Agent)
+        eval_object = ray.remote(evaluator.Agent)
+        # initialization
+        workers_info = tools.GlobalVarActor.remote()
+        trainer_agent = trainer_object.remote(config, input_data, workers_info)
+        eval_agent = eval_object.remote(config, input_data, workers_info)
+        # remote call
+        trainer_future = trainer_agent.imitate.remote()
+        eval_future = eval_agent.evaluate.remote()
+        # getting results from remote functions
+        _ = ray.get(trainer_future)
+        _ = ray.get(eval_future)
+        ray.shutdown()
+
+    else:
+        trainer_agent = trainer.Agent(config, input_data)
+        trainer_agent.imitate()
 
 
 def rl_train(input_data):  # , checkpoint):

@@ -1,10 +1,11 @@
 import abc
 import time
-import pickle
+# import pickle
 
 import numpy as np
 import tensorflow as tf
 import tensorflow_addons as tfa
+import ray
 # import reverb
 
 from lux_ai import models, tools, tfrecords_storage
@@ -16,7 +17,7 @@ if len(physical_devices) > 0:
 
 
 class Agent(abc.ABC):
-    def __init__(self, config, data):
+    def __init__(self, config, data, global_var_actor=None):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = [item.shape for item in empty_worker_action_vectors]
@@ -50,6 +51,8 @@ class Agent(abc.ABC):
         if data is not None:
             self._model.set_weights(data['weights'])
             print("Continue the model training.")
+
+        self._global_var_actor = global_var_actor if global_var_actor else None
 
         # self._dataset = reverb.TrajectoryDataset.from_table_signature(
         #     server_address=f'localhost:{buffer_server_port}',
@@ -85,9 +88,10 @@ class Agent(abc.ABC):
         #     patience=10,
         #     restore_best_weights=False,
         # )
+        save_weights_callback = tools.SaveWeightsCallback()
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
             loss={
                 "output_1": self._loss_function1,
                 "output_2": self._loss_function2_0,
@@ -107,16 +111,19 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=10, validation_data=ds_valid)
-        # , callbacks=[early_stop_callback, lr_scheduler])
-        weights = self._model.get_weights()
-        data = {
-            'weights': weights,
-        }
-        with open(f'data/data.pickle', 'wb') as f:
-            pickle.dump(data, f, protocol=4)
+        self._model.fit(ds_train, epochs=3, validation_data=ds_valid, verbose=2,
+                        callbacks=[save_weights_callback])
+        # weights = self._model.get_weights()
+        # data = {
+        #     'weights': weights,
+        # }
+        # with open(f'data/data.pickle', 'wb') as f:
+        #     pickle.dump(data, f, protocol=4)
 
+        if self._global_var_actor is not None:
+            ray.get(self._global_var_actor.set_done.remote(True))
         print("Imitation is done.")
+        time.sleep(1)
 
 
 class ACAgent(abc.ABC):

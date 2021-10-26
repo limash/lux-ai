@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import backend
@@ -86,6 +88,18 @@ class LossFunction3(tf.keras.losses.Loss):
         # loss = tf.scatter_nd(indices=tf.expand_dims(res_idx, axis=-1), updates=loss_base, shape=self._batch_size)
         loss = loss_base
         return loss
+
+
+class SaveWeightsCallback(tf.keras.callbacks.Callback):
+
+    def on_epoch_end(self, epoch, logs=None):
+        weights = self.model.get_weights()
+        data = {
+            'weights': weights,
+        }
+        with open(f'data/weights/{epoch}.pickle', 'wb') as f:
+            pickle.dump(data, f, protocol=4)
+        print(f"{epoch}.pickle is saved.")
 
 
 def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
@@ -202,21 +216,7 @@ def norm_probs(probs_unnorm):
 @ray.remote
 class GlobalVarActor:
     def __init__(self):
-        self.global_v = 1
-        self.current_weights = None, None
         self.done = False
-
-    def set_global_v(self, v):
-        self.global_v = v
-
-    def get_global_v(self):
-        return self.global_v
-
-    def set_current_weights(self, w):
-        self.current_weights = w
-
-    def get_current_weights(self):
-        return self.current_weights
 
     def set_done(self, done):
         self.done = done
