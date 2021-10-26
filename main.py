@@ -17,7 +17,7 @@ def scrape():
         scraper_agent = scraper.Agent(config)
         scraper_agent.scrape_all()
     elif config["scrape_type"] == "multi":
-        parallel_calls = 2
+        parallel_calls = 8
         actions_shape = [item.shape for item in empty_worker_action_vectors]
         env_name = config["environment"]
         feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
