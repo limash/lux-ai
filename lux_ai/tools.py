@@ -28,6 +28,20 @@ def base_loss(y_true, y_pred, class_weights):
     return tf.reduce_sum(class_weights * y_true * tf.math.log(y_true / y_pred), axis=-1)
 
 
+class LossFunctionSixActions(tf.keras.losses.Loss):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        one = tf.constant(1.)
+        idle_multiplier = tf.constant(0.1)
+        build_multiplier = tf.constant(2.)
+        class_weights = tf.stack([one, one, one, one, idle_multiplier, build_multiplier], axis=0)
+        self._class_weights = tf.expand_dims(class_weights, axis=0)
+
+    def call(self, y_true, y_pred):
+        loss = base_loss(y_true, y_pred, self._class_weights)
+        return loss
+
+
 class LossFunction1(tf.keras.losses.Loss):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

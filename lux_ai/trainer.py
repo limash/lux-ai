@@ -15,18 +15,19 @@ physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
+model_dict = {
+    "actor_critic_residual_straight": models.actor_critic_residual_straight,
+    "actor_critic_residual_shrub": models.actor_critic_residual_shrub,
+    "actor_critic_efficient": models.actor_critic_efficient,
+}
+
 
 class Agent(abc.ABC):
     def __init__(self, config, data, global_var_actor=None):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = [item.shape for item in empty_worker_action_vectors]
-        if config["model_name"] == "actor_critic_residual":
-            self._model = models.actor_critic_residual(self._actions_shape)
-        elif config["model_name"] == "actor_critic_efficient":
-            self._model = models.actor_critic_efficient(self._actions_shape)
-        else:
-            raise ValueError
+        self._model = model_dict[config["model_name"]](6)
 
         # launch a model once to define structure
         dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
@@ -37,16 +38,11 @@ class Agent(abc.ABC):
         self._model(dummy_input)
 
         self._batch_size = config["batch_size"]
-        # class_weights = np.ones(self._actions_shape, dtype=np.single)
-        # class_weights[4] = 0.1
-        # class_weights[5] = 2.
-        # class_weights = tf.convert_to_tensor(class_weights, dtype=tf.float32)
-        # self._class_weights = tf.expand_dims(class_weights, axis=0)
-        # self._loss_function = tools.skewed_kldivergence_loss(self._class_weights)
-        self._loss_function1 = tools.LossFunction1()
-        self._loss_function2_0 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
-        self._loss_function2_1 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
-        self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
+        # self._loss_function1 = tools.LossFunction1()
+        # self._loss_function2_0 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
+        # self._loss_function2_1 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
+        # self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
+        self._loss_function = tools.LossFunctionSixActions()
 
         if data is not None:
             self._model.set_weights(data['weights'])
@@ -63,20 +59,22 @@ class Agent(abc.ABC):
     def imitate(self):
         ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                "data/tfrecords/imitator/train/")
-        ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
-                                                               "data/tfrecords/imitator/validation/")
+        # ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
+        #                                                        "data/tfrecords/imitator/validation/")
         ds_train = ds_train.batch(self._batch_size).prefetch(1)  # , drop_remainder=True)
-        ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
+        # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in ds_train.take(10):
         #     observations = sample[0].numpy()
         #     actions_probs0 = sample[1][0].numpy()
-        #     actions_probs1 = sample[1][1].numpy()
-        #     actions_probs2 = sample[1][2].numpy()
-        #     actions_probs3 = sample[1][3].numpy()
-        #     total_rewards = sample[1][4].numpy()
-        #     probs_output0, probs_output1, probs_output2, probs_output3, value_output = self._model(observations)
-        #     probs_output_v = probs_output0.numpy()
+        #     # actions_probs1 = sample[1][1].numpy()
+        #     # actions_probs2 = sample[1][2].numpy()
+        #     # actions_probs3 = sample[1][3].numpy()
+        #     total_rewards = sample[1][1].numpy()
+        #     # probs_output0, probs_output1, probs_output2, probs_output3, value_output = self._model(observations)
+        #     probs_output, value_output = self._model(observations)
+        #     probs_output_v = probs_output.numpy()
+        #     skewed_loss = self._loss_function(sample[1][0], probs_output)
         #     skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
         #     skewed_loss2 = self._loss_function2_0(sample[1][1], probs_output1)
         #     skewed_loss3 = self._loss_function2_1(sample[1][2], probs_output2)
@@ -93,11 +91,12 @@ class Agent(abc.ABC):
         self._model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
             loss={
-                "output_1": self._loss_function1,
-                "output_2": self._loss_function2_0,
-                "output_3": self._loss_function2_1,
-                "output_4": self._loss_function3,
-                "output_5": None  # tf.keras.losses.MeanSquaredError()
+                "output_1": self._loss_function,
+                "output_2": None,
+                # "output_2": self._loss_function2_0,
+                # "output_3": self._loss_function2_1,
+                # "output_4": self._loss_function3,
+                # "output_5": None  # tf.keras.losses.MeanSquaredError()
             },
             metrics={
                 "output_1": [tf.keras.metrics.CategoricalAccuracy()],
@@ -111,8 +110,10 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=3, validation_data=ds_valid, verbose=2,
-                        callbacks=[save_weights_callback])
+        self._model.fit(ds_train, epochs=1,  # validation_data=ds_valid,
+                        # verbose=2,
+                        callbacks=[save_weights_callback, ]
+                        )
         # weights = self._model.get_weights()
         # data = {
         #     'weights': weights,

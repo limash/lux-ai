@@ -294,6 +294,24 @@ def split_movement_actions(observation, inputs):
         return observation, (action_probs_1, zeros, zeros, action_probs_3, reward)
 
 
+def merge_actions(observation, inputs):
+    act_probs, dir_probs, res_probs, reward = inputs
+    if act_probs[0] == 1:  # movement action
+        movements = dir_probs
+    else:
+        movements = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+    if act_probs[1] == 1 or act_probs[2] == 1:  # transfer of idle
+        idle = tf.constant([1, ], dtype=tf.float32)
+    else:
+        idle = tf.constant([0, ], dtype=tf.float32)
+    if act_probs[3] == 1:
+        bcity = tf.constant([1, ], dtype=tf.float32)
+    else:
+        bcity = tf.constant([0, ], dtype=tf.float32)
+    new_actions = tf.concat([movements, idle, bcity], axis=0)
+    return observation, (new_actions, reward)
+
+
 def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
@@ -344,7 +362,8 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
     #     foo = random_reverse(*foo)
-    #     foo = split_movement_actions(*foo)
+    #     # foo = split_movement_actions(*foo)
+    #     foo = merge_actions(*foo)
     #     count += 1
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
@@ -352,7 +371,8 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
-    ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
+    ds = ds.map(merge_actions, num_parallel_calls=AUTO)
+    # ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
     ds = ds.shuffle(10000)
     return ds
 
