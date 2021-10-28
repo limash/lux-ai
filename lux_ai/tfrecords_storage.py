@@ -369,7 +369,12 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     filenames = tf.io.gfile.glob(path + "*.tfrec")
     filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     filenames_ds = filenames_ds.with_options(option_no_order)
-    ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    # ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    ds = filenames_ds.interleave(lambda x:
+                                 filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO),
+                                 cycle_length=5,
+                                 num_parallel_calls=AUTO
+                                 )
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     ds = ds.map(merge_actions, num_parallel_calls=AUTO)
     # ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
