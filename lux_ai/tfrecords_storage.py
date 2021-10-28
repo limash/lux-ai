@@ -357,24 +357,30 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     option_no_order = tf.data.Options()
     option_no_order.experimental_deterministic = False
 
-    # test_dataset = tf.data.TFRecordDataset(path + '28231713_Toad Brigade.tfrec')
+    filenames = tf.io.gfile.glob(path + "*.tfrec")
+
+    # test_dataset = tf.data.Dataset.from_tensor_slices(filenames[:12])
+    # test_dataset = tf.data.Dataset.list_files(filenames[:12])
+    # test_dataset = test_dataset.interleave(lambda x: tf.data.TFRecordDataset(x),
+    #                                        cycle_length=5,
+    #                                        num_parallel_calls=AUTO,
+    #                                        )
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
-    #     foo = random_reverse(*foo)
+    #     # foo = random_reverse(*foo)
     #     # foo = split_movement_actions(*foo)
-    #     foo = merge_actions(*foo)
+    #     # foo = merge_actions(*foo)
     #     count += 1
 
-    filenames = tf.io.gfile.glob(path + "*.tfrec")
-    filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    filenames_ds = tf.data.Dataset.list_files(filenames)
     filenames_ds = filenames_ds.with_options(option_no_order)
-    # ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    ds = filenames_ds.interleave(lambda x:
-                                 filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO),
+    ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
                                  cycle_length=5,
                                  num_parallel_calls=AUTO
                                  )
+    ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     ds = ds.map(merge_actions, num_parallel_calls=AUTO)
     # ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
