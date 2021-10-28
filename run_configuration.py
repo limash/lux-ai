@@ -1,6 +1,6 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "scrape",
+    "setup": "imitate",
     "model_name": "actor_critic_residual_straight",
     "n_points": 40,
 }
@@ -18,8 +18,8 @@ CONF_Evaluate = {
 }
 
 CONF_Imitate = {
-    "batch_size": 200,
-    "with_evaluation": False,
+    "batch_size": 600,
+    "with_evaluation": True,
 }
 
 CONF_RL = {

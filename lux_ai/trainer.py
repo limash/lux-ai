@@ -1,6 +1,6 @@
 import abc
 import time
-# import pickle
+import pickle
 
 import numpy as np
 import tensorflow as tf
@@ -89,7 +89,7 @@ class Agent(abc.ABC):
         save_weights_callback = tools.SaveWeightsCallback()
 
         self._model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
             loss={
                 "output_1": self._loss_function,
                 "output_2": None,
@@ -110,16 +110,16 @@ class Agent(abc.ABC):
             # "output_2": 0.1},
         )
 
-        self._model.fit(ds_train, epochs=1,  # validation_data=ds_valid,
-                        # verbose=2,
+        self._model.fit(ds_train, epochs=5,  # validation_data=ds_valid,
+                        verbose=2,
                         callbacks=[save_weights_callback, ]
                         )
-        # weights = self._model.get_weights()
-        # data = {
-        #     'weights': weights,
-        # }
-        # with open(f'data/data.pickle', 'wb') as f:
-        #     pickle.dump(data, f, protocol=4)
+        weights = self._model.get_weights()
+        data = {
+            'weights': weights,
+        }
+        with open(f'data/data.pickle', 'wb') as f:
+            pickle.dump(data, f, protocol=4)
 
         if self._global_var_actor is not None:
             ray.get(self._global_var_actor.set_done.remote(True))
