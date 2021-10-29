@@ -312,7 +312,7 @@ def merge_actions(observation, inputs):
     return observation, (new_actions, reward)
 
 
-def read_records_for_imitator(feature_maps_shape, actions_shape, path):
+def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
     # to allow order-altering optimizations.
@@ -365,6 +365,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     #                                        cycle_length=5,
     #                                        num_parallel_calls=AUTO,
     #                                        )
+    # test_dataset = tf.data.TFRecordDataset(filenames[:12])
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
@@ -373,17 +374,21 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, path):
     #     # foo = merge_actions(*foo)
     #     count += 1
 
-    # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    filenames_ds = tf.data.Dataset.list_files(filenames)
+    filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    # filenames_ds = tf.data.Dataset.list_files(filenames)
     filenames_ds = filenames_ds.with_options(option_no_order)
-    ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
-                                 cycle_length=5,
-                                 num_parallel_calls=AUTO
-                                 )
-    ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    # ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
+    #                              cycle_length=5,
+    #                              num_parallel_calls=AUTO
+    #                              )
+    ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
-    ds = ds.map(merge_actions, num_parallel_calls=AUTO)
-    # ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
+    if model_name == "actor_critic_residual_shrub":
+        ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
+    elif model_name == "actor_critic_residual_six_actions":
+        ds = ds.map(merge_actions, num_parallel_calls=AUTO)
+    else:
+        raise NotImplementedError
     ds = ds.shuffle(10000)
     return ds
 

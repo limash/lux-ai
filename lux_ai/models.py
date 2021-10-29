@@ -1,7 +1,7 @@
 # move all imports inside functions to use ray.remote multitasking
 
 
-def actor_critic_residual_straight(actions_shape):
+def actor_critic_residual_six_actions(actions_shape):
     import tensorflow as tf
     import tensorflow.keras as keras
 

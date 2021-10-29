@@ -1,7 +1,7 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
     "setup": "imitate",
-    "model_name": "actor_critic_residual_straight",
+    "model_name": "actor_critic_residual_six_actions",
     "n_points": 40,
 }
 

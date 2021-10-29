@@ -17,9 +17,10 @@ if len(physical_devices) > 0:
 
 class Agent(abc.ABC):
     def __init__(self, config, data, global_var_actor=None):
+        self._model_name = config["model_name"]
         self._compare_agent = agents.get_agent(config["eval_compare_agent"], is_gym=False)
         if data:
-            self._agent = agents.get_agent("half_imitator_six_actions", data, is_gym=False)
+            self._agent = agents.get_agent(self._model_name, data, is_gym=False)
         else:
             self._agent = None
 
@@ -35,7 +36,7 @@ class Agent(abc.ABC):
             if files_n > prev_files_n:
                 with open(files[-1], 'rb') as file:
                     data = pickle.load(file)
-                self._agent = agents.get_agent("half_imitator_six_actions", data, is_gym=False)
+                self._agent = agents.get_agent(self._model_name, data, is_gym=False)
                 summary = [0, 0]
                 raw_name = pathlib.Path(files[-1]).stem
                 print(f"Evaluating {raw_name}.pickle weights.")
