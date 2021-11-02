@@ -32,7 +32,7 @@ def scrape(env_name, data, team_name=None, only_wins=False):
     reward, done are for the current observation.
     """
     if team_name:
-        if data["info"]["TeamNames"][0] == data["info"]["TeamNames"][0] == team_name:
+        if data["info"]["TeamNames"][0] == data["info"]["TeamNames"][1] == team_name:
             team_of_interest = -1
         elif data["info"]["TeamNames"][0] == team_name:
             team_of_interest = 1
