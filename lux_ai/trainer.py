@@ -134,13 +134,15 @@ class ACAgent(abc.ABC):
     def __init__(self, config, data):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
-        self._actions_shape = actions_number
-        if config["model_name"] == "actor_critic_residual":
-            self._model = models.actor_critic_residual(self._actions_shape)
-        elif config["model_name"] == "actor_critic_efficient":
-            self._model = models.actor_critic_efficient(self._actions_shape)
+        self._actions_shape = [item.shape for item in empty_worker_action_vectors]
+        self._model_name = config["model_name"]
+        self._batch_size = config["batch_size"]
+        if self._model_name == "actor_critic_residual_shrub":
+            self._model = models.actor_critic_residual_shrub(self._actions_shape)
+        elif self._model_name == "actor_critic_residual_six_actions":
+            self._model = models.actor_critic_residual_six_actions(6)
         else:
-            raise ValueError
+            raise NotImplementedError
 
         # launch a model once to define structure
         dummy_feature_maps = np.zeros(self._feature_maps_shape, dtype=np.float32)
@@ -148,12 +150,10 @@ class ACAgent(abc.ABC):
         dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
         dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
         self._model(dummy_input)
-
         if data is not None:
             self._model.set_weights(data['weights'])
             print("Continue the model training.")
 
-        self._batch_size = config["batch_size"]
         self._n_points = config["n_points"]
         self._iterations_number = config["iterations_number"]
         self._save_interval = config["save_interval"]
@@ -313,7 +313,8 @@ class ACAgent(abc.ABC):
         return data_count
 
     def do_train(self):
-        ds = tfrecords_storage.read_records_for_rl(self._feature_maps_shape, self._actions_shape,
+        ds = tfrecords_storage.read_records_for_rl(self._feature_maps_shape, self._actions_shape, self._n_points,
+                                                   self._model_name,
                                                    "data/tfrecords/rl/")
         ds = ds.batch(self._batch_size)
         iterator = iter(ds)

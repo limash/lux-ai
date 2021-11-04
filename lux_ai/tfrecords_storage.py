@@ -325,6 +325,29 @@ def merge_actions(observation, inputs):
     return observation, (new_actions, reward)
 
 
+def merge_actions_rl(act_numbers, act_probs, dir_probs, res_probs, observation, reward, mask, progress):
+    # steps = act_probs.shape[0]
+    steps = 40
+    ta = tf.TensorArray(dtype=tf.float32, size=steps, dynamic_size=False)
+    for i in tf.range(steps):
+        if act_probs[i][0] == 1:  # movement action
+            movements = dir_probs[i]
+        else:
+            movements = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+        if act_probs[i][1] == 1 or act_probs[i][2] == 1:  # transfer of idle
+            idle = tf.constant([1, ], dtype=tf.float32)
+        else:
+            idle = tf.constant([0, ], dtype=tf.float32)
+        if act_probs[i][3] == 1:
+            bcity = tf.constant([1, ], dtype=tf.float32)
+        else:
+            bcity = tf.constant([0, ], dtype=tf.float32)
+        row = tf.concat([movements, idle, bcity], axis=0)
+        ta = ta.write(i, row)
+    new_probs = ta.stack()
+    return act_numbers, new_probs, observation, reward, mask, progress
+
+
 def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
@@ -406,18 +429,19 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     return ds
 
 
-def read_records_for_rl(feature_maps_shape, actions_shape, path):
+def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, model_name, path):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
     # to allow order-altering optimizations.
     episode_length = 360
-    trajectory_steps = 40
     total_len = episode_length + trajectory_steps
 
     def read_tfrecord(example):
         features = {
             "actions_numbers": tf.io.FixedLenFeature([], tf.string),
-            "actions_probs": tf.io.FixedLenFeature([], tf.string),
+            "actions_probs_1": tf.io.FixedLenFeature([], tf.string),
+            "actions_probs_2": tf.io.FixedLenFeature([], tf.string),
+            "actions_probs_3": tf.io.FixedLenFeature([], tf.string),
             "observations": tf.io.FixedLenFeature([], tf.string),
             "rewards": tf.io.FixedLenFeature([], tf.string),
             "masks": tf.io.FixedLenFeature([], tf.string),
@@ -428,10 +452,14 @@ def read_records_for_rl(feature_maps_shape, actions_shape, path):
         example = tf.io.parse_single_example(example, features)
 
         actions_numbers = tf.io.parse_tensor(example["actions_numbers"], tf.int16)
-        actions_numbers.set_shape(total_len)
+        actions_numbers.set_shape([total_len, len(actions_shape)])
 
-        actions_probs = tf.io.parse_tensor(example["actions_probs"], tf.float16)
-        actions_probs.set_shape([total_len, actions_shape])
+        actions_probs_1 = tf.io.parse_tensor(example["actions_probs_1"], tf.float16)
+        actions_probs_1.set_shape([total_len] + list(actions_shape[0]))
+        actions_probs_2 = tf.io.parse_tensor(example["actions_probs_2"], tf.float16)
+        actions_probs_2.set_shape([total_len] + list(actions_shape[1]))
+        actions_probs_3 = tf.io.parse_tensor(example["actions_probs_3"], tf.float16)
+        actions_probs_3.set_shape([total_len] + list(actions_shape[2]))
 
         observations = tf.io.parse_tensor(example["observations"], tf.string)
         observations = tf.expand_dims(observations, axis=0)
@@ -453,8 +481,10 @@ def read_records_for_rl(feature_maps_shape, actions_shape, path):
         final_idx.set_shape(())
         start_idx = tf.random.uniform(shape=(), minval=0, maxval=final_idx, dtype=tf.int64)
 
-        return tf.cast(actions_numbers[start_idx: start_idx + trajectory_steps], dtype=tf.int32), \
-               tf.cast(actions_probs[start_idx: start_idx + trajectory_steps, :], dtype=tf.float32), \
+        return tf.cast(actions_numbers[start_idx: start_idx + trajectory_steps, :], dtype=tf.int32), \
+               tf.cast(actions_probs_1[start_idx: start_idx + trajectory_steps, :], dtype=tf.float32), \
+               tf.cast(actions_probs_2[start_idx: start_idx + trajectory_steps, :], dtype=tf.float32), \
+               tf.cast(actions_probs_3[start_idx: start_idx + trajectory_steps, :], dtype=tf.float32), \
                tf.cast(observations[start_idx: start_idx + trajectory_steps, :, :, :], dtype=tf.float32), \
                tf.cast(rewards[start_idx: start_idx + trajectory_steps], dtype=tf.float32), \
                tf.cast(masks[start_idx: start_idx + trajectory_steps], dtype=tf.float32), \
@@ -464,10 +494,11 @@ def read_records_for_rl(feature_maps_shape, actions_shape, path):
     # option_no_order = tf.data.Options()
     # option_no_order.experimental_deterministic = False
 
-    # test_dataset = tf.data.TFRecordDataset(path + '27374559_Toad Brigade.tfrec')
+    # test_dataset = tf.data.TFRecordDataset(path + '29588162_Toad Brigade.tfrec')
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
+    #     foo = merge_actions_rl(*foo)
     #     count += 1
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
@@ -477,4 +508,8 @@ def read_records_for_rl(feature_maps_shape, actions_shape, path):
 
     # filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    if model_name == "actor_critic_residual_six_actions":
+        ds = ds.map(merge_actions_rl, num_parallel_calls=AUTO)
+    else:
+        raise NotImplementedError
     return ds
