@@ -345,6 +345,7 @@ def merge_actions_rl(act_numbers, act_probs, dir_probs, res_probs, observation, 
         row = tf.concat([movements, idle, bcity], axis=0)
         ta = ta.write(i, row)
     new_probs = ta.stack()
+    act_numbers = tf.argmax(new_probs, axis=1)
     return act_numbers, new_probs, observation, reward, mask, progress
 
 
