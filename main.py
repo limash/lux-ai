@@ -1,6 +1,7 @@
 import pickle
 import glob
 import random
+import pathlib
 
 import ray
 
@@ -17,14 +18,28 @@ def scrape():
         scraper_agent = scraper.Agent(config)
         scraper_agent.scrape_all()
     elif config["scrape_type"] == "multi":
-        parallel_calls = 8
+        parallel_calls = config["parallel_calls"]
         actions_shape = [item.shape for item in empty_worker_action_vectors]
         env_name = config["environment"]
         feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         lux_version = config["lux_version"]
         team_name = config["team_name"]
         only_wins = config["only_wins"]
+        is_for_rl = config["is_for_rl"]
         files_pool = set(glob.glob("./data/jsons/*.json"))
+        if is_for_rl:
+            data_path = "./data/tfrecords/rl/"
+        else:
+            data_path = "./data/tfrecords/imitator/train/"
+        already_saved_files = glob.glob(data_path + "*.tfrec")
+        file_names_saved = []
+        for i, file_name in enumerate(files_pool):
+            raw_name = pathlib.Path(file_name).stem
+            if f"{data_path}{raw_name}_{team_name}.tfrec" in already_saved_files:
+                print(f"File {file_name} for {team_name}; is already saved.")
+                file_names_saved.append(file_name)
+        files_pool -= set(file_names_saved)
+
         set_size = int(len(files_pool) / parallel_calls)
         sets = []
         for _ in range(parallel_calls):
@@ -32,15 +47,12 @@ def scrape():
             files_pool -= new_set
             sets.append(new_set)
 
-        already_saved_files = glob.glob("./data/tfrecords/imitator/train/*.tfrec")
-
         for i, file_names in enumerate(zip(*sets)):
             print(f"Iteration {i} starts")
             ray.init(num_cpus=parallel_calls, include_dashboard=False)
             scraper_object = ray.remote(scraper.scrape_file)
-            futures = [scraper_object.remote(env_name, file_names[j], team_name,
-                                             already_saved_files, lux_version, only_wins,
-                                             feature_maps_shape, actions_shape, i)
+            futures = [scraper_object.remote(env_name, file_names[j], team_name, lux_version, only_wins,
+                                             feature_maps_shape, actions_shape, i, is_for_rl)
                        for j in range(len(file_names))]
             _ = ray.get(futures)
             ray.shutdown()

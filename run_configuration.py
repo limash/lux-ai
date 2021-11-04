@@ -7,7 +7,8 @@ CONF_Main = {
 
 CONF_Scrape = {
     "lux_version": "3.1.0",
-    "scrape_type": "single",
+    "scrape_type": "multi",
+    "parallel_calls": 8,
     "is_for_rl": True,
     "team_name": "Toad Brigade",
     "only_wins": False,

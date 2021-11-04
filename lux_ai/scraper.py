@@ -320,14 +320,10 @@ def scrape(env_name, data, team_name=None, only_wins=False):
     return output
 
 
-def scrape_file(env_name, file_name, team_name,
-                already_saved_files, lux_version, only_wins,
-                feature_maps_shape, acts_shape, record_number):
+def scrape_file(env_name, file_name, team_name, lux_version, only_wins,
+                feature_maps_shape, acts_shape, record_number, is_for_rl):
     with open(file_name, "r") as read_file:
         raw_name = pathlib.Path(file_name).stem
-        if f"./data/tfrecords/imitator/train/{raw_name}_{team_name}.tfrec" in already_saved_files:
-            print(f"File {file_name} for {team_name}; is already saved.")
-            return
         data = json.load(read_file)
         if data["version"] != lux_version:
             print(f"File {file_name}; is for an inappropriate lux version.")
@@ -343,7 +339,8 @@ def scrape_file(env_name, file_name, team_name,
 
     tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                              feature_maps_shape, acts_shape, record_number,
-                             raw_name + "_" + team_name)
+                             raw_name + "_" + team_name, progress,
+                             is_for_rl)
 
 
 class Agent(abc.ABC):
@@ -384,7 +381,11 @@ class Agent(abc.ABC):
         self._only_wins = config["only_wins"]
 
         self._files = glob.glob("./data/jsons/*.json")
-        self._already_saved_files = glob.glob("./data/tfrecords/imitator/train/*.tfrec")
+        if self._is_for_rl:
+            self._data_path = "./data/tfrecords/rl/"
+        else:
+            self._data_path = "./data/tfrecords/imitator/train/"
+        self._already_saved_files = glob.glob(self._data_path + "*.tfrec")
 
     def _scrape(self, data, team_name=None, only_wins=False):
         output = scrape(self._env_name, data, team_name, only_wins)
@@ -418,7 +419,7 @@ class Agent(abc.ABC):
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
                 raw_name = pathlib.Path(file_name).stem
-                if f"./data/tfrecords/imitator/train/{raw_name}_{self._team_name}.tfrec" in self._already_saved_files:
+                if f"{self._data_path}{raw_name}_{self._team_name}.tfrec" in self._already_saved_files:
                     print(f"File {file_name} for {self._team_name}; {i}; is already saved.")
                     # data = json.load(read_file)
                     # print(f"Team 0: {data['info']['TeamNames'][0]}, Team 1: {data['info']['TeamNames'][1]}")
