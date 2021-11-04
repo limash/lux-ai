@@ -1,14 +1,14 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "imitate",
+    "setup": "scrape",
     "model_name": "actor_critic_residual_six_actions",
     "n_points": 40,
 }
 
 CONF_Scrape = {
     "lux_version": "3.1.0",
-    "scrape_type": "multi",
-    "is_for_rl": False,
+    "scrape_type": "single",
+    "is_for_rl": True,
     "team_name": "Toad Brigade",
     "only_wins": False,
 }

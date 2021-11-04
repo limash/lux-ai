@@ -38,7 +38,9 @@ def to_tfrecord(reward, action_probs, observation):
 def to_tfrecord_for_rl(actions_numbers, actions_probs, observations, rewards, masks, progress_array, final_idx):
     feature = {
         "actions_numbers": _bytestring_feature([actions_numbers]),
-        "actions_probs": _bytestring_feature([actions_probs]),
+        "actions_probs_1": _bytestring_feature([actions_probs[0]]),
+        "actions_probs_2": _bytestring_feature([actions_probs[1]]),
+        "actions_probs_3": _bytestring_feature([actions_probs[2]]),
         "observations": _bytestring_feature([observations]),
         "rewards": _bytestring_feature([rewards]),
         "masks": _bytestring_feature([masks]),
@@ -55,7 +57,8 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl):
             for n, (actions_numbers, actions_probs, observations, rewards,
                     masks, progress_array, final_idx) in enumerate(ds):
                 s_actions_numbers = tf.io.serialize_tensor(actions_numbers)
-                s_actions_probs = tf.io.serialize_tensor(actions_probs)
+                # s_actions_probs = tf.io.serialize_tensor(actions_probs)
+                serial_action_probs = [tf.io.serialize_tensor(item).numpy() for item in actions_probs]
                 s_observations = tf.io.serialize_tensor(tf.io.serialize_sparse(observations))
                 s_rewards = tf.io.serialize_tensor(rewards)
                 s_masks = tf.io.serialize_tensor(masks)
@@ -63,7 +66,7 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl):
                 # s_final_idx = tf.io.serialize_tensor(final_idx)
                 example = to_tfrecord_for_rl(
                     s_actions_numbers.numpy(),
-                    s_actions_probs.numpy(),
+                    serial_action_probs,
                     s_observations.numpy(),
                     s_rewards.numpy(),
                     s_masks.numpy(),
@@ -125,11 +128,13 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 unit_type = key.split("_")[0]
                 if unit_type != "u":
                     continue
-                actions = unit.actions
-                counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
+                # actions = unit.actions
+                # counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
                 # create np arrays to store data
-                actions_numbers = -np.ones([total_len])
-                actions_probs = np.zeros([total_len] + list(actions.shape))
+                # actions_numbers = -np.ones([total_len])
+                # actions_probs = np.zeros([total_len] + list(actions.shape))
+                actions_numbers = -np.ones([total_len] + [len(unit.data[0][1])])
+                actions_probs = [np.zeros([total_len] + list(item.shape)) for item in unit.data[0][1]]
                 observations = np.zeros([total_len] + list(unit.data[0][2].shape))
                 rewards = np.zeros([total_len])
                 masks = np.zeros([total_len])
@@ -137,16 +142,23 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 i = 0
                 for i, point in enumerate(unit.data):
                     # point [action, action_probs, observation]
-                    actions_numbers[i] = np.argmax(point[0])
-                    actions_probs[i] = point[1]
+                    # actions_numbers[i] = np.argmax(point[0])
+                    # actions_probs[i] = point[1]
+                    # actions_numbers[i] = np.array([np.argmax(item) for item in point[0]])
+                    for n, item in enumerate(point[0]):
+                        non_zeros = np.count_nonzero(item)
+                        if non_zeros:
+                            actions_numbers[i][n] = np.argmax(item)
+                    for n, prob_item in enumerate(point[1]):
+                        actions_probs[n][i] = prob_item
                     observations[i] = point[2]
                     rewards[i] = final_reward
                     masks[i] = 1
                     progress_array[i] = progress[unit.step[i]].numpy()
-                    counters += point[0]
+                    # counters += point[0]
                 # cast to tf tensors
                 actions_numbers = tf.constant(actions_numbers, dtype=tf.int16)
-                actions_probs = tf.constant(actions_probs, dtype=tf.float16)
+                actions_probs = tuple([tf.constant(item, dtype=tf.float16) for item in actions_probs])
                 observations = tf.sparse.from_dense(tf.constant(observations, dtype=tf.float16))
                 rewards = tf.constant(rewards, dtype=tf.float16)
                 masks = tf.constant(masks, dtype=tf.int16)
@@ -206,7 +218,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                         break
 
     # result = []
-    # generator = data_gen_all()
+    # generator = data_gen_all_for_rl()
     # while len(result) < 1000:
     #     x = next(generator)
     #     result.append(x)
@@ -215,8 +227,9 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
         dataset = tf.data.Dataset.from_generator(
             data_gen_all_for_rl,
             output_signature=(
-                tf.TensorSpec(shape=total_len, dtype=tf.int16),
-                tf.TensorSpec(shape=[total_len, actions_shape], dtype=tf.float16),
+                tf.TensorSpec(shape=[total_len, len(actions_shape)], dtype=tf.int16),
+                tuple([tf.TensorSpec(shape=[total_len] + list(actions_number), dtype=tf.float16)
+                       for actions_number in actions_shape]),
                 tf.SparseTensorSpec(shape=[total_len] + list(feature_maps_shape), dtype=tf.float16),
                 tf.TensorSpec(shape=total_len, dtype=tf.float16),
                 tf.TensorSpec(shape=total_len, dtype=tf.int16),
