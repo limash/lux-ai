@@ -504,7 +504,7 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
     # option_no_order = tf.data.Options()
     # option_no_order.experimental_deterministic = False
 
-    # test_dataset = tf.data.TFRecordDataset(path + '29588162_Toad Brigade.tfrec')
+    # test_dataset = tf.data.TFRecordDataset(path + '29587904_Toad Brigade_70.tfrec')
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
@@ -512,12 +512,16 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
     #     count += 1
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
-    filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    filenames_ds = filenames_ds.shuffle(len(filenames), reshuffle_each_iteration=True)
-    filenames_ds = filenames_ds.repeat(episode_length)
+    # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    # filenames_ds = filenames_ds.shuffle(len(filenames), reshuffle_each_iteration=True)
+    filenames_ds = tf.data.Dataset.list_files(filenames)
+    filenames_ds = filenames_ds.repeat(episode_length/2)
 
-    # filenames_ds = filenames_ds.with_options(option_no_order)
-    ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
+                                 cycle_length=5,
+                                 num_parallel_calls=AUTO
+                                 )
+    ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_six_actions":
         ds = ds.map(merge_actions_rl, num_parallel_calls=AUTO)
     else:

@@ -28,7 +28,7 @@ def scrape():
         is_for_rl = config["is_for_rl"]
         files_pool = set(glob.glob("./data/jsons/*.json"))
         if is_for_rl:
-            data_path = "./data/tfrecords/rl/"
+            data_path = "./data/tfrecords/rl/storage/"
         else:
             data_path = "./data/tfrecords/imitator/train/"
         already_saved_files = glob.glob(data_path + "*.tfrec")

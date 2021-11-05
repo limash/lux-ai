@@ -382,10 +382,14 @@ class Agent(abc.ABC):
 
         self._files = glob.glob("./data/jsons/*.json")
         if self._is_for_rl:
-            self._data_path = "./data/tfrecords/rl/"
+            self._data_path = "./data/tfrecords/rl/storage/"
         else:
             self._data_path = "./data/tfrecords/imitator/train/"
-        self._already_saved_files = glob.glob(self._data_path + "*.tfrec")
+        already_saved_files = glob.glob(self._data_path + "*.tfrec")
+        self._saved_submissions = set()
+        for file_name in already_saved_files:
+            raw_name = pathlib.Path(file_name).stem
+            self._saved_submissions.add(raw_name.split("_")[0])
 
     def _scrape(self, data, team_name=None, only_wins=False):
         output = scrape(self._env_name, data, team_name, only_wins)
@@ -419,7 +423,8 @@ class Agent(abc.ABC):
         for i, file_name in enumerate(self._files):
             with open(file_name, "r") as read_file:
                 raw_name = pathlib.Path(file_name).stem
-                if f"{self._data_path}{raw_name}_{self._team_name}.tfrec" in self._already_saved_files:
+                # if f"{self._data_path}{raw_name}_{self._team_name}.tfrec" in self._already_saved_files:
+                if raw_name in self._saved_submissions:
                     print(f"File {file_name} for {self._team_name}; {i}; is already saved.")
                     # data = json.load(read_file)
                     # print(f"Team 0: {data['info']['TeamNames'][0]}, Team 1: {data['info']['TeamNames'][1]}")

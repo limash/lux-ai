@@ -29,7 +29,7 @@ CONF_RL = {
     "default_lr": 1e-6,
     "batch_size": 5,
     "iterations_number": 1000,
-    "save_interval": 100,
+    # "save_interval": 100,
     "entropy_c": 2.e-3,
     "entropy_c_decay": 0.3,
 }

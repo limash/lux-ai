@@ -156,7 +156,7 @@ class ACAgent(abc.ABC):
 
         self._n_points = config["n_points"]
         self._iterations_number = config["iterations_number"]
-        self._save_interval = config["save_interval"]
+        # self._save_interval = config["save_interval"]
 
         self._optimizer = tfa.optimizers.AdamW(weight_decay=1.e-5, learning_rate=config["default_lr"])
         self._entropy_c = config["entropy_c"]
@@ -313,13 +313,13 @@ class ACAgent(abc.ABC):
         return data_count
 
     def do_train(self):
-        ds = tfrecords_storage.read_records_for_rl(self._feature_maps_shape, self._actions_shape, self._n_points,
-                                                   self._model_name,
-                                                   "data/tfrecords/rl/")
-        ds = ds.batch(self._batch_size)
-        iterator = iter(ds)
+        ds_storage = tfrecords_storage.read_records_for_rl(
+            self._feature_maps_shape, self._actions_shape, self._n_points, self._model_name,
+            "data/tfrecords/rl/storage/"
+        )
+        ds_storage = ds_storage.batch(self._batch_size)
+        iterator = iter(ds_storage)
         for step_counter in range(1, self._iterations_number + 1):
-
             # sampling
             sample = next(iterator)
 
