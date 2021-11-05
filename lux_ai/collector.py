@@ -1,75 +1,51 @@
 import abc
-import random
 
-# import numpy as np
 import tensorflow as tf
 import gym
 # import reverb
 # import ray
 
-from lux_ai import tools, tfrecords_storage
 import lux_gym.agents.agents as agents
-from lux_gym.envs.lux.action_vectors import action_vector
+from lux_ai import tools, tfrecords_storage
+from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 
-# def get_policy(model):
-#     def policy():
-#         actions = []
-#         return actions
-#
-#     return policy
-
-
 class Agent(abc.ABC):
-
-    def __init__(self, config):
+    def __init__(self, config, data):
         # buffer_table_names, buffer_server_port,
-        # data=None,
         # ray_queue=None, collector_id=None, workers_info=None, num_collectors=None
         # ):
         """
         Args:
             config: A configuration dictionary
+            data: a neural net weights
             # buffer_table_names: dm reverb server table names
             # buffer_server_port: a port where a dm reverb server was initialized
-            # data: a neural net weights
             # ray_queue: a ray interprocess queue to store neural net weights
             # collector_id: to identify a current collector if there are several ones
             # workers_info: a ray interprocess (remote) object to store shared information
             # num_collectors: a total amount of collectors
         """
-        self._n_players = 2
         self._env_name = config["environment"]
+        self._n_points = config["n_points"]
+        self._model_name = config["model_name"]
+        if data is None:
+            raise ValueError("No weights data.")
+        self._agent = agents.get_processing_agent(self._model_name, data)
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
-        self._actions_number = len(action_vector)
-
-        self._n_points = config["n_points"]
+        self._actions_shape = [item.shape for item in empty_worker_action_vectors]
 
         # self._table_names = buffer_table_names
         # self._client = reverb.Client(f'localhost:{buffer_server_port}')
-
         # self._ray_queue = ray_queue
         # self._collector_id = collector_id
         # self._workers_info = workers_info
         # self._num_collectors = num_collectors
-
-        self._policies_pool = [agents.get_processing_agent(name) for name in config["saved_policies"]]
-
-        # if not config["debug"]:
-        #     self._predict = tf.function(self._predict)
-
-        # if data:
-        #     self._model = models.get_actor_critic2(model_type='exp')
-        #     dummy_input = tf.ones(self._feature_maps_shape, dtype=tf.float16)
-        #     dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
-        #     self._predict(dummy_input)
-        #     self._model.set_weights(data['weights'])
-        #     self._policy = get_policy(self._predict)
 
     def _collect(self, agent):
         """
@@ -99,6 +75,8 @@ class Agent(abc.ABC):
 
         for step in range(1, configuration.episodeSteps):
             dones, observations = environment.step((actions_1, actions_2))
+            if any(dones):
+                break
             game_states = environment.game_states
             actions_1, actions_1_dict, actions_1_probs, proc_obs1, reward1 = agent(observations[0],
                                                                                    configuration, game_states[0])
@@ -107,9 +85,9 @@ class Agent(abc.ABC):
 
             player1_data = tools.add_point(player1_data, actions_1_dict, actions_1_probs, proc_obs1, step)
             player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_probs, proc_obs2, step)
-            if any(dones):
-                break
 
+        reward1 = observations[0]["reward"]
+        reward2 = observations[1]["reward"]
         progress = tf.linspace(0., 1., step + 2)[:-1]
         progress = tf.cast(progress, dtype=tf.float16)
 
@@ -125,14 +103,14 @@ class Agent(abc.ABC):
         return (player1_data, player2_data), (final_reward_1, final_reward_2), progress
 
     def collect_once(self):
-        policy = random.sample(self._policies_pool, 1)[0]
-        return self._collect(policy)
+        return self._collect(self._agent)
 
     def collect_and_store(self, number_of_collects):
         for i in range(number_of_collects):
             (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
             tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
-                                     self._feature_maps_shape, self._actions_number, i)
+                                     self._feature_maps_shape, self._actions_shape, i,
+                                     i, progress, is_for_rl=True)
 
 # def update_model(self, data):
     #     self._model.set_weights(data['weights'])

@@ -5,7 +5,7 @@ import pathlib
 
 import ray
 
-from lux_ai import scraper, evaluator, trainer, tools
+from lux_ai import scraper, collector, evaluator, trainer, tools
 from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 from run_configuration import CONF_Scrape, CONF_RL, CONF_Main, CONF_Imitate, CONF_Evaluate
 
@@ -60,6 +60,12 @@ def scrape():
         raise ValueError
 
     return 0
+
+
+def collect(input_data):
+    config = {**CONF_Main}
+    collect_agent = collector.Agent(config, input_data)
+    collect_agent.collect_once()
 
 
 def evaluate(input_data):
@@ -117,6 +123,8 @@ if __name__ == '__main__':
 
     if CONF_Main["setup"] == "scrape":
         scrape()
+    elif CONF_Main["setup"] == "collect":
+        collect(init_data)
     elif CONF_Main["setup"] == "evaluate":
         evaluate(init_data)
     elif CONF_Main["setup"] == "imitate":
