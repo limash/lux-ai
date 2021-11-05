@@ -313,15 +313,25 @@ class ACAgent(abc.ABC):
         return data_count
 
     def do_train(self):
+        ds_learn = tfrecords_storage.read_records_for_rl(
+            self._feature_maps_shape, self._actions_shape, self._n_points, self._model_name,
+            "data/tfrecords/rl/learn/"
+        )
         ds_storage = tfrecords_storage.read_records_for_rl(
             self._feature_maps_shape, self._actions_shape, self._n_points, self._model_name,
             "data/tfrecords/rl/storage/"
         )
+        ds_learn = ds_learn.batch(self._batch_size)
         ds_storage = ds_storage.batch(self._batch_size)
-        iterator = iter(ds_storage)
+
+        storage_iterator = iter(ds_storage)
+        learn_iterator = iter(ds_learn)
         for step_counter in range(1, self._iterations_number + 1):
             # sampling
-            sample = next(iterator)
+            if step_counter % 3 == 0:
+                sample = next(storage_iterator)
+            else:
+                sample = next(learn_iterator)
 
             # training
             t1 = time.time()

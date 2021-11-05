@@ -339,19 +339,24 @@ def merge_actions_rl(act_numbers, act_probs, dir_probs, res_probs, observation, 
     steps = 40
     ta = tf.TensorArray(dtype=tf.float32, size=steps, dynamic_size=False)
     for i in tf.range(steps):
-        if act_probs[i][0] == 1:  # movement action
-            movements = dir_probs[i]
-        else:
-            movements = tf.constant([0, 0, 0, 0], dtype=tf.float32)
-        if act_probs[i][1] == 1 or act_probs[i][2] == 1:  # transfer of idle
-            idle = tf.constant([1, ], dtype=tf.float32)
-        else:
-            idle = tf.constant([0, ], dtype=tf.float32)
-        if act_probs[i][3] == 1:
-            bcity = tf.constant([1, ], dtype=tf.float32)
-        else:
-            bcity = tf.constant([0, ], dtype=tf.float32)
-        row = tf.concat([movements, idle, bcity], axis=0)
+        movements = dir_probs[i] * act_probs[i][0]
+        idle = act_probs[i][1:2] + act_probs[i][2:3]  # transfer + idle
+        bcity = act_probs[i][3:]
+        # if act_numbers[i][0] == 0:  # movement action
+        #     movements = dir_probs[i]
+        # else:
+        #     movements = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+        # if act_numbers[i][0] == 1 or act_numbers[i][0] == 2:  # transfer of idle
+        #     idle = tf.constant([1, ], dtype=tf.float32)
+        # else:
+        #     idle = tf.constant([0, ], dtype=tf.float32)
+        # if act_numbers[i][0] == 3:  # build city
+        #     bcity = tf.constant([1, ], dtype=tf.float32)
+        # else:
+        #     bcity = tf.constant([0, ], dtype=tf.float32)
+        row_probs = tf.concat([movements, idle, bcity], axis=0)
+        row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
+        row = tf.nn.softmax(row_logs)  # normalize action probs
         ta = ta.write(i, row)
     new_probs = ta.stack()
     act_numbers = tf.argmax(new_probs, axis=1)
@@ -504,7 +509,7 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
     # option_no_order = tf.data.Options()
     # option_no_order.experimental_deterministic = False
 
-    # test_dataset = tf.data.TFRecordDataset(path + '29587904_Toad Brigade_70.tfrec')
+    # test_dataset = tf.data.TFRecordDataset(path + '0_0.tfrec')
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
@@ -515,7 +520,7 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     # filenames_ds = filenames_ds.shuffle(len(filenames), reshuffle_each_iteration=True)
     filenames_ds = tf.data.Dataset.list_files(filenames)
-    filenames_ds = filenames_ds.repeat(episode_length/2)
+    filenames_ds = filenames_ds.repeat(100)
 
     ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
                                  cycle_length=5,
