@@ -65,7 +65,7 @@ def scrape():
 def collect(input_data):
     config = {**CONF_Main}
     collect_agent = collector.Agent(config, input_data)
-    collect_agent.collect_once()
+    collect_agent.collect_and_store(1)
 
 
 def evaluate(input_data):
