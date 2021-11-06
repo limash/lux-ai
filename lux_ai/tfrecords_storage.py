@@ -357,6 +357,8 @@ def merge_actions_rl(act_numbers, act_probs, dir_probs, res_probs, observation, 
         row_probs = tf.concat([movements, idle, bcity], axis=0)
         row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
         row = tf.nn.softmax(row_logs)  # normalize action probs
+        if tf.reduce_any(tf.math.is_nan(row)):
+            row = row_probs
         ta = ta.write(i, row)
     new_probs = ta.stack()
     act_numbers = tf.argmax(new_probs, axis=1)
@@ -509,7 +511,8 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
     # option_no_order = tf.data.Options()
     # option_no_order.experimental_deterministic = False
 
-    # test_dataset = tf.data.TFRecordDataset(path + '0_0.tfrec')
+    # filenames = tf.io.gfile.glob(path + "*.tfrec")
+    # test_dataset = tf.data.TFRecordDataset(filenames)
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)

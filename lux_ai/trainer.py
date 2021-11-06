@@ -1,6 +1,7 @@
 import abc
 import time
 import pickle
+import itertools
 
 import numpy as np
 import tensorflow as tf
@@ -139,8 +140,10 @@ class ACAgent(abc.ABC):
         self._batch_size = config["batch_size"]
         if self._model_name == "actor_critic_residual_shrub":
             self._model = models.actor_critic_residual_shrub(self._actions_shape)
+            self._model_actions_shape = self._actions_shape
         elif self._model_name == "actor_critic_residual_six_actions":
             self._model = models.actor_critic_residual_six_actions(6)
+            self._model_actions_shape = 6
         else:
             raise NotImplementedError
 
@@ -155,7 +158,7 @@ class ACAgent(abc.ABC):
             print("Continue the model training.")
 
         self._n_points = config["n_points"]
-        self._iterations_number = config["iterations_number"]
+        # self._iterations_number = config["iterations_number"]
         # self._save_interval = config["save_interval"]
 
         self._optimizer = tfa.optimizers.AdamW(weight_decay=1.e-5, learning_rate=config["default_lr"])
@@ -205,7 +208,7 @@ class ACAgent(abc.ABC):
         #                     (tf.ones_like(episode_dones) - episode_dones)[:, :-1]), axis=1)
         # mask3d = tf.where(behaviour_policy_logits == 0., 0., 1.)
         mask2d = masks
-        mask3d = tf.transpose(tf.ones([self._actions_shape, 1, 1], dtype=tf.float32) * mask2d, perm=[1, 2, 0])
+        mask3d = tf.transpose(tf.ones([self._model_actions_shape, 1, 1], dtype=tf.float32) * mask2d, perm=[1, 2, 0])
         if self._is_debug:
             mask2d_v = mask2d.numpy()
             mask3d_v = mask3d.numpy()
@@ -218,7 +221,7 @@ class ACAgent(abc.ABC):
         #                                                                              labels=actions)
         # it is almost similar to above line, but above probably won't work on cpus (due to -1 actions)
         behaviour_action_log_probs = tools.get_prob_logs_from_probs(behaviour_policy_probs, actions,
-                                                                    self._actions_shape)
+                                                                    self._model_actions_shape)
         if self._is_debug:
             behaviour_action_log_probs_v = behaviour_action_log_probs.numpy()
 
@@ -249,7 +252,10 @@ class ACAgent(abc.ABC):
             # values = tf.roll(values, shift=1, axis=0)  # where actions, logits, etc. led to the observation
             # probs = tf.roll(probs, shift=1, axis=1)  # shift by 1 along time dimension, to match a pattern
             # values = tf.roll(values, shift=1, axis=1)  # where actions, logits, etc. led to the observation
-            target_action_log_probs = tools.get_prob_logs_from_probs(probs, actions, self._actions_shape)
+            target_action_log_probs = tools.get_prob_logs_from_probs(probs, actions, self._model_actions_shape)
+            if self._is_debug:
+                probs_v = probs.numpy()
+                target_action_log_probs_v = target_action_log_probs.numpy()
 
             with tape.stop_recording():
                 log_rhos = target_action_log_probs - behaviour_action_log_probs
@@ -326,12 +332,16 @@ class ACAgent(abc.ABC):
 
         storage_iterator = iter(ds_storage)
         learn_iterator = iter(ds_learn)
-        for step_counter in range(1, self._iterations_number + 1):
+        # for step_counter in range(1, self._iterations_number + 1):
+        for step_counter in itertools.count(1):
             # sampling
             if step_counter % 3 == 0:
                 sample = next(storage_iterator)
             else:
-                sample = next(learn_iterator)
+                try:
+                    sample = next(learn_iterator)
+                except StopIteration:
+                    break
 
             # training
             t1 = time.time()
