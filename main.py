@@ -32,10 +32,15 @@ def scrape():
         else:
             data_path = "./data/tfrecords/imitator/train/"
         already_saved_files = glob.glob(data_path + "*.tfrec")
+        saved_submissions = set()
+        for file_name in already_saved_files:
+            raw_name = pathlib.Path(file_name).stem
+            saved_submissions.add(raw_name.split("_")[0])
+
         file_names_saved = []
         for i, file_name in enumerate(files_pool):
             raw_name = pathlib.Path(file_name).stem
-            if f"{data_path}{raw_name}_{team_name}.tfrec" in already_saved_files:
+            if raw_name in saved_submissions:
                 print(f"File {file_name} for {team_name}; is already saved.")
                 file_names_saved.append(file_name)
         files_pool -= set(file_names_saved)
@@ -65,7 +70,7 @@ def scrape():
 def collect(input_data):
     config = {**CONF_Main}
     collect_agent = collector.Agent(config, input_data)
-    collect_agent.collect_and_store(1)
+    collect_agent.collect_and_store(10)
 
 
 def evaluate(input_data):
