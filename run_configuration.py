@@ -24,7 +24,7 @@ CONF_Imitate = {
 }
 
 CONF_RL = {
-    "rl_type": "single",
+    "rl_type": "with_evaluation",
     "lambda": 0.8,
     "debug": False,
     "default_lr": 1e-6,
