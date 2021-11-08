@@ -2,6 +2,8 @@ import pickle
 import glob
 import random
 import pathlib
+from multiprocessing import Process
+
 
 import ray
 
@@ -69,8 +71,15 @@ def scrape():
 
 def collect(input_data):
     config = {**CONF_Main}
-    collect_agent = collector.Agent(config, input_data)
-    collect_agent.collect_and_store(10)
+
+    def collect_and_store(n, conf, in_data):
+        collect_agent = collector.Agent(conf, in_data)
+        collect_agent.collect_and_store(n)
+
+    for i in range(100):
+        p = Process(target=collect_and_store, args=(i, config, input_data))
+        p.start()
+        p.join()
 
 
 def evaluate(input_data):

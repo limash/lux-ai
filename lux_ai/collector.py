@@ -105,12 +105,11 @@ class Agent(abc.ABC):
     def collect_once(self):
         return self._collect(self._agent)
 
-    def collect_and_store(self, number_of_collects):
-        for i in range(number_of_collects):
-            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
-            tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
-                                     self._feature_maps_shape, self._actions_shape, i,
-                                     i, progress, is_for_rl=True, save_path="data/tfrecords/rl/learn/")
+    def collect_and_store(self, collect_n):
+        (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
+        tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
+                                 self._feature_maps_shape, self._actions_shape, collect_n,
+                                 collect_n, progress, is_for_rl=True, save_path="data/tfrecords/rl/learn/")
 
 # def update_model(self, data):
     #     self._model.set_weights(data['weights'])
