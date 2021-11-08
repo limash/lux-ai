@@ -496,7 +496,7 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
 
         final_idx = example["final_idx"]
         final_idx.set_shape(())
-        start_idx = tf.random.uniform(shape=(), minval=0, maxval=final_idx, dtype=tf.int64)
+        start_idx = tf.random.uniform(shape=(), minval=0, maxval=final_idx+1, dtype=tf.int64)
 
         return tf.cast(actions_numbers[start_idx: start_idx + trajectory_steps, :], dtype=tf.int32), \
                tf.cast(actions_probs_1[start_idx: start_idx + trajectory_steps, :], dtype=tf.float32), \
@@ -523,7 +523,7 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     # filenames_ds = filenames_ds.shuffle(len(filenames), reshuffle_each_iteration=True)
     filenames_ds = tf.data.Dataset.list_files(filenames)
-    filenames_ds = filenames_ds.repeat(100)
+    # filenames_ds = filenames_ds.repeat(100)
 
     ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
                                  cycle_length=5,

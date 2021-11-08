@@ -1,6 +1,6 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "collect",
+    "setup": "rl",
     "model_name": "actor_critic_residual_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
@@ -25,9 +25,9 @@ CONF_Imitate = {
 
 CONF_RL = {
     "lambda": 0.8,
-    "debug": True,
+    "debug": False,
     "default_lr": 1e-6,
-    "batch_size": 5,
+    "batch_size": 10,
     # "iterations_number": 1000,
     # "save_interval": 100,
     "entropy_c": 2.e-3,

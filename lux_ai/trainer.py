@@ -327,8 +327,8 @@ class ACAgent(abc.ABC):
             self._feature_maps_shape, self._actions_shape, self._n_points, self._model_name,
             "data/tfrecords/rl/storage/"
         )
-        ds_learn = ds_learn.batch(self._batch_size)
-        ds_storage = ds_storage.batch(self._batch_size)
+        ds_learn = ds_learn.batch(self._batch_size).prefetch(1)
+        ds_storage = ds_storage.batch(self._batch_size).prefetch(1)
 
         storage_iterator = iter(ds_storage)
         learn_iterator = iter(ds_learn)
@@ -348,5 +348,12 @@ class ACAgent(abc.ABC):
             self._training_step(*sample)
             t2 = time.time()
             print(f"Training. Step: {step_counter} Time: {t2 - t1:.2f}.")
+
+        weights = self._model.get_weights()
+        data = {
+            'weights': weights,
+        }
+        with open(f'data/weights/data.pickle', 'wb') as f:
+            pickle.dump(data, f, protocol=4)
 
         print("RL training is done.")
