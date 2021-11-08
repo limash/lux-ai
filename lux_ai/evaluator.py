@@ -62,4 +62,3 @@ class Agent(abc.ABC):
             prev_files_n = files_n
 
         print("Evaluation is done.")
-        time.sleep(1)

@@ -105,106 +105,13 @@ class Agent(abc.ABC):
     def collect_once(self):
         return self._collect(self._agent)
 
-    def collect_and_store(self, collect_n):
+    def collect_and_store(self, collect_n, data_path):
         (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
         tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                                  self._feature_maps_shape, self._actions_shape, collect_n,
-                                 collect_n, progress, is_for_rl=True, save_path="data/tfrecords/rl/learn/")
+                                 collect_n, progress, is_for_rl=True, save_path=data_path)
 
-# def update_model(self, data):
-    #     self._model.set_weights(data['weights'])
 
-    # def add_model_to_pool(self, data):
-    #     model = models.get_actor_critic(self._feature_maps_shape, self._actions_number)
-    #     dummy_input = tf.ones(self._feature_maps_shape, dtype=tf.float16)
-    #     dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
-    #     model = tf.function(model)
-    #     model(dummy_input)
-    #     model.set_weights(data['weights'])
-    #     policy = get_policy(model)
-    #     self._policies_pool.append(policy)
-
-    # def _predict(self, observation):
-    #     return self._model(observation)
-
-    # def _policy(self, current_game_state, observation):
-    #     """
-    #     Policy method defines response to observation for all units of a player.
-    #     :param current_game_state:
-    #     :param observation:
-    #     :return:
-    #     """
-    #     actions = []
-    #     logits = []
-    #     observation = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), observation)
-    #     policy_logits, _ = self._predict(observation)
-    #     action = tf.random.categorical(policy_logits, num_samples=1, dtype=tf.int32)
-    #     actions.append(action.numpy()[0][0])
-    #     logits.append(policy_logits.numpy()[0])
-    #     # probabilities = tf.nn.softmax(policy_logits)
-    #     # return np.argmax(probabilities[0])
-
-    #     return actions  # , actions_dict, actions_probs_dict, processed_observations
-
-    # def do_collect(self):
-    #     num_collects = 0
-    #     num_updates = 0
-
-    #     while True:
-    #         # trainer will switch to done on the last iteration
-    #         is_done = ray.get(self._workers_info.get_done.remote())
-    #         if is_done:
-    #             # print("Collecting is done.")
-    #             return num_collects, num_updates
-    #         # get the current turn, so collectors (workers) update weights one by one
-    #         curr_worker = ray.get(self._workers_info.get_global_v.remote())
-    #         # check the current turn
-    #         if curr_worker == self._collector_id:
-    #             if not self._ray_queue.empty():  # see below
-    #                 try:
-    #                     # block = False will cause an exception if there is no data in the queue,
-    #                     # which is not handled by a ray queue (incompatibility with python 3.8 ?)
-    #                     weights = self._ray_queue.get(block=False)
-    #                     if curr_worker == self._num_collectors:
-    #                         # print(f"Worker {curr_worker} updates weights")
-    #                         ray.get(self._workers_info.set_global_v.remote(1))
-    #                         num_updates += 1
-    #                     elif curr_worker < self._num_collectors:
-    #                         ray.get(self._workers_info.set_global_v.remote(curr_worker + 1))
-    #                         # print(f"Worker {curr_worker} update weights")
-    #                         num_updates += 1
-    #                     else:
-    #                         print("Wrong worker")
-    #                         raise NotImplementedError
-    #                 except Empty:
-    #                     weights = None
-    #             else:
-    #                 weights = None
-    #         else:
-    #             weights = None
-
-    #         if weights is not None:
-    #             self._model.set_weights(weights)
-    #             # print("Weights are updated")
-
-    #         epsilon = None
-    #         # t1 = time.time()
-    #         if self._data is not None:
-    #             if num_collects % 25 == 0:
-    #                 self._collect(epsilon, is_random=True)
-    #                 # print("Episode with a random trajectory was collected; "
-    #                 #       f"Num of collects: {num_collects}")
-    #             else:
-    #                 self._collect(epsilon)
-    #                 # print(f"Num of collects: {num_collects}")
-    #         else:
-    #             if num_collects < 10000 or num_collects % 25 == 0:
-    #                 if num_collects == 9999:
-    #                     print("Collector: The last initial random collect.")
-    #                 self._collect(epsilon, is_random=True)
-    #             else:
-    #                 self._collect(epsilon)
-    #         num_collects += 1
-    #         # print(f"Num of collects: {num_collects}")
-    #         # t2 = time.time()
-    #         # print(f"Collecting. Time: {t2 - t1}")
+def collect_and_store(n, conf, in_data, data_path="data/tfrecords/rl/learn_a/"):
+    collect_agent = Agent(conf, in_data)
+    collect_agent.collect_and_store(n, data_path)

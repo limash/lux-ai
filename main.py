@@ -2,6 +2,7 @@ import pickle
 import glob
 import random
 import pathlib
+import time
 from multiprocessing import Process
 
 
@@ -72,12 +73,8 @@ def scrape():
 def collect(input_data):
     config = {**CONF_Main}
 
-    def collect_and_store(n, conf, in_data):
-        collect_agent = collector.Agent(conf, in_data)
-        collect_agent.collect_and_store(n)
-
     for i in range(100):
-        p = Process(target=collect_and_store, args=(i, config, input_data))
+        p = Process(target=collector.collect_and_store, args=(i, config, input_data))
         p.start()
         p.join()
 
@@ -114,7 +111,7 @@ def imitate(input_data):
 
 
 def rl_train(input_data):  # , checkpoint):
-    config = {**CONF_Main, **CONF_RL}
+    config = {**CONF_Main, **CONF_RL, **CONF_Evaluate}
     # if checkpoint is not None:
     #     path = str(Path(checkpoint).parent)  # due to https://github.com/deepmind/reverb/issues/12
     #     checkpointer = reverb.checkpointers.DefaultCheckpointer(path=path)
@@ -124,8 +121,34 @@ def rl_train(input_data):  # , checkpoint):
     # buffer = storage.UniformBuffer(feature_maps_shape,
     #                                num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
     #                                n_points=config["n_points"], checkpointer=checkpointer)
-    trainer_agent = trainer.ACAgent(config, input_data)
-    trainer_agent.do_train()
+    if config["rl_type"] == "single":
+        trainer_agent = trainer.ACAgent(config, input_data)
+        trainer_agent.do_train()
+    elif config["rl_type"] == "with_evaluation":
+        for i in range(10):
+            print(f"RL learning, cycle {i}.")
+            ray.init(num_gpus=1, include_dashboard=False)
+            # remote objects creation
+            trainer_object = ray.remote(num_gpus=1)(trainer.ACAgent)
+            eval_object = ray.remote(evaluator.Agent)
+            # initialization
+            workers_info = tools.GlobalVarActor.remote()
+            trainer_agent = trainer_object.remote(config, input_data, i, workers_info)
+            eval_agent = eval_object.remote(config, input_data, workers_info)
+            # remote call
+            trainer_future = trainer_agent.do_train.remote()
+            eval_future = eval_agent.evaluate.remote()
+            # getting results from remote functions
+            _ = ray.get(trainer_future)
+            _ = ray.get(eval_future)
+            time.sleep(1)
+            ray.shutdown()
+
+        raise NotImplementedError
+    elif config["rl_type"] == "continuous":
+        raise NotImplementedError
+    else:
+        raise NotImplementedError
 
 
 if __name__ == '__main__':

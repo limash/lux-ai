@@ -2,6 +2,7 @@ import abc
 import time
 import pickle
 import itertools
+import glob
 
 import numpy as np
 import tensorflow as tf
@@ -132,7 +133,7 @@ class Agent(abc.ABC):
 
 
 class ACAgent(abc.ABC):
-    def __init__(self, config, data):
+    def __init__(self, config, data, current_cycle=None, global_var_actor=None):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = [item.shape for item in empty_worker_action_vectors]
@@ -153,9 +154,18 @@ class ACAgent(abc.ABC):
         dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
         dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
         self._model(dummy_input)
-        if data is not None:
-            self._model.set_weights(data['weights'])
-            print("Continue the model training.")
+        # load weights
+        files = glob.glob("./data/weights/*.pickle")
+        files_n = len(files)
+        if files_n > 0:
+            with open(files[-1], 'rb') as file:
+                data = pickle.load(file)
+                print(f"Continue the model training from {files[-1]}.")
+        elif data is not None:
+            print("Continue the model training from data.pickle.")
+        else:
+            raise NotImplementedError
+        self._model.set_weights(data['weights'])
 
         self._n_points = config["n_points"]
         # self._iterations_number = config["iterations_number"]
@@ -169,6 +179,9 @@ class ACAgent(abc.ABC):
         self._is_debug = config["debug"]
         if not config["debug"]:
             self._training_step = tf.function(self._training_step)
+
+        self._current_cycle = current_cycle if current_cycle else None
+        self._global_var_actor = global_var_actor if global_var_actor else None
 
     def _training_step(self, actions, behaviour_policy_probs, observations, total_rewards, masks, progress):
         print("Tracing")
@@ -319,9 +332,14 @@ class ACAgent(abc.ABC):
         return data_count
 
     def do_train(self):
+        if self._current_cycle:
+            save_path = f'data/weights/{self._current_cycle}.pickle'
+        else:
+            save_path = f'data/weights/data.pickle'
+
         ds_learn = tfrecords_storage.read_records_for_rl(
             self._feature_maps_shape, self._actions_shape, self._n_points, self._model_name,
-            "data/tfrecords/rl/learn/"
+            "data/tfrecords/rl/learn_a/"
         )
         ds_storage = tfrecords_storage.read_records_for_rl(
             self._feature_maps_shape, self._actions_shape, self._n_points, self._model_name,
@@ -347,13 +365,17 @@ class ACAgent(abc.ABC):
             t1 = time.time()
             self._training_step(*sample)
             t2 = time.time()
-            print(f"Training. Step: {step_counter} Time: {t2 - t1:.2f}.")
+            if step_counter % 100 == 0:
+                print(f"Training. Step: {step_counter} Time: {t2 - t1:.2f}.")
 
         weights = self._model.get_weights()
         data = {
             'weights': weights,
         }
-        with open(f'data/weights/data.pickle', 'wb') as f:
+        with open(save_path, 'wb') as f:
             pickle.dump(data, f, protocol=4)
+
+        if self._global_var_actor is not None:
+            ray.get(self._global_var_actor.set_done.remote(True))
 
         print("RL training is done.")
