@@ -197,6 +197,11 @@ def ac_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
         def _training_step(self, actions, behaviour_policy_probs, observations, total_rewards, masks, progress):
             print("Tracing")
 
+            actions = tf.where(tf.cast(masks, dtype=tf.int32) == 0, -1, tf.cast(actions, dtype=tf.int32))
+            foo_ones = tf.ones([1, self._n_points])
+            foo_rewards = total_rewards[:, :1]
+            total_rewards = foo_rewards * foo_ones
+
             if self._is_debug:
                 actions_v = actions.numpy()
                 behaviour_policy_probs_v = behaviour_policy_probs.numpy()
