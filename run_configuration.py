@@ -1,6 +1,6 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "rl",
+    "setup": "scrape",
     "model_name": "actor_critic_residual_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
@@ -9,7 +9,7 @@ CONF_Scrape = {
     "lux_version": "3.1.0",
     "scrape_type": "single",
     "parallel_calls": 8,
-    "is_for_rl": True,
+    "is_for_rl": False,
     "team_name": "Toad Brigade",
     "only_wins": False,
 }

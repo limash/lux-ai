@@ -85,16 +85,21 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None):
     else:
         if save_path is None:
             save_path = "data/tfrecords/imitator/train/"
-        filename = f"{save_path}{record_name}.tfrec"
-        with tf.io.TFRecordWriter(filename) as out_file:
-            for n, (observation, action_probs, reward) in enumerate(ds):
-                serial_action_probs = [tf.io.serialize_tensor(item).numpy() for item in action_probs]
-                serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
-                example = to_tfrecord(reward.numpy().astype(np.float32),
-                                      serial_action_probs,
-                                      serial_observation.numpy())
-                out_file.write(example.SerializeToString())
-        print(f"Wrote file #{record_number} {record_name}.tfrec containing {n} records")
+        out_file = None
+        # with tf.io.TFRecordWriter(filename) as out_file:
+        for n, (observation, action_probs, reward) in enumerate(ds):
+            if out_file is None or n % 3000 == 0:
+                if out_file is not None:
+                    out_file.close()
+                filename = f"{save_path}{record_name}_{n}.tfrec"
+                out_file = tf.io.TFRecordWriter(filename)
+            serial_action_probs = [tf.io.serialize_tensor(item).numpy() for item in action_probs]
+            serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
+            example = to_tfrecord(reward.numpy().astype(np.float32),
+                                  serial_action_probs,
+                                  serial_observation.numpy())
+            out_file.write(example.SerializeToString())
+        print(f"Wrote group #{record_number} {record_name} tfrec files containing {n} records")
 
 
 def record(player1_data, player2_data, final_reward_1, final_reward_2,
