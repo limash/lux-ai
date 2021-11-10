@@ -203,6 +203,15 @@ def ac_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
             foo_rewards = total_rewards[:, :1]
             total_rewards = foo_rewards * foo_ones
 
+            loss_weights_n = tf.where(actions == 0, 1., 0.)
+            loss_weights_e = tf.where(actions == 1, 1., 0.)
+            loss_weights_s = tf.where(actions == 2, 1., 0.)
+            loss_weights_w = tf.where(actions == 3, 1., 0.)
+            loss_weights_idle = tf.where(actions == 4, 0.1, 0.)
+            loss_weights_bcity = tf.where(actions == 5, 2., 0.)
+            loss_weights = (loss_weights_n + loss_weights_e + loss_weights_s + loss_weights_w +
+                            loss_weights_idle + loss_weights_bcity)
+
             if self._is_debug:
                 actions_v = actions.numpy()
                 behaviour_policy_probs_v = behaviour_policy_probs.numpy()
@@ -210,6 +219,7 @@ def ac_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
                 total_rewards_v = total_rewards.numpy()
                 masks_v = masks.numpy()
                 progress_v = progress.numpy()
+                loss_weights_v = loss_weights.numpy()
 
             # actions = tf.transpose(actions)
             # behaviour_policy_logits = tf.transpose(behaviour_policy_logits, perm=[1, 0, 2])
@@ -323,7 +333,7 @@ def ac_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
                     # td_error = modified_rhos * targets
                     # td_error = modified_rhos * (targets - values)
                     # td_error = clipped_rhos * (targets - values)
-                    td_error = clipped_rhos * targets
+                    td_error = clipped_rhos * targets * loss_weights
 
                 # critic loss
                 # critic_loss = self._loss_fn(targets, values)
