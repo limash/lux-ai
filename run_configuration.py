@@ -24,9 +24,9 @@ CONF_Imitate = {
 }
 
 CONF_RL = {
-    "rl_type": "with_evaluation",
-    "lambda": 0.8,
-    "debug": False,
+    "rl_type": "single",
+    # "lambda": 0.8,
+    "debug": True,
     "default_lr": 1e-5,
     "batch_size": 10,
     # "iterations_number": 1000,

@@ -141,6 +141,7 @@ def rl_train(input_data):  # , checkpoint):
             _ = ray.get(eval_future)
             time.sleep(1)
             ray.shutdown()
+            time.sleep(5)
     elif config["rl_type"] == "continuous":
         raise NotImplementedError
     else:
