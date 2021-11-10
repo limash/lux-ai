@@ -316,6 +316,9 @@ def ac_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
 
                 with tape.stop_recording():
                     # td error with truncated IS weights (rhos), it is a constant:
+                    # modified_rhos = tf.math.divide_no_nan(1., clipped_rhos)
+                    # modified_rhos = tf.minimum(tf.constant(2.), modified_rhos)
+                    # td_error = modified_rhos * (targets - values)
                     td_error = clipped_rhos * (targets - values)
 
                 # critic loss
