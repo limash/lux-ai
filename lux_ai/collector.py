@@ -130,7 +130,7 @@ def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_o
         collect_agent = Agent(conf, in_data)
         collect_agent.collect_and_store(iteration, data_path, collector_n)
 
-    for i in range(10):
+    for i in range(100):
         p = Process(target=collect_and_store, args=(i, config_out, input_data_out, data_path_out, collector_n_out))
         p.start()
         p.join()
