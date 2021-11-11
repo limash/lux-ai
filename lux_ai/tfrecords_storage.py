@@ -417,29 +417,27 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
 
     filenames = tf.io.gfile.glob(path + "*.tfrec")
 
-    # test_dataset = tf.data.Dataset.from_tensor_slices(filenames[:12])
     # test_dataset = tf.data.Dataset.list_files(filenames[:12])
     # test_dataset = test_dataset.interleave(lambda x: tf.data.TFRecordDataset(x),
     #                                        cycle_length=5,
     #                                        num_parallel_calls=AUTO,
     #                                        )
-    # test_dataset = tf.data.TFRecordDataset(filenames[:12])
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
-    #     # foo = random_reverse(*foo)
+    #     foo = random_reverse(*foo)
+    #     foo = merge_actions(*foo)
     #     # foo = split_movement_actions(*foo)
-    #     # foo = merge_actions(*foo)
     #     count += 1
 
-    filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    # filenames_ds = tf.data.Dataset.list_files(filenames)
-    filenames_ds = filenames_ds.with_options(option_no_order)
-    # ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
-    #                              cycle_length=5,
-    #                              num_parallel_calls=AUTO
-    #                              )
-    ds = filenames_ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    filenames_ds = tf.data.Dataset.list_files(filenames)
+    # filenames_ds = filenames_ds.with_options(option_no_order)
+    ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
+                                 cycle_length=5,
+                                 num_parallel_calls=AUTO
+                                 )
+    ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
         ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)

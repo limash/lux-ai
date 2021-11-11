@@ -8,7 +8,7 @@ from multiprocessing import Process
 
 import ray
 
-from lux_ai import scraper, collector, evaluator, trainer, tools
+from lux_ai import scraper, collector, evaluator, imitator, trainer, tools
 from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 from run_configuration import CONF_Scrape, CONF_RL, CONF_Main, CONF_Imitate, CONF_Evaluate
 
@@ -91,7 +91,7 @@ def imitate(input_data):
     if config["with_evaluation"]:
         ray.init(num_gpus=1, include_dashboard=False)
         # remote objects creation
-        trainer_object = ray.remote(num_gpus=1)(trainer.Agent)
+        trainer_object = ray.remote(num_gpus=1)(imitator.Agent)
         eval_object = ray.remote(evaluator.Agent)
         # initialization
         workers_info = tools.GlobalVarActor.remote()
@@ -103,10 +103,11 @@ def imitate(input_data):
         # getting results from remote functions
         _ = ray.get(trainer_future)
         _ = ray.get(eval_future)
+        time.sleep(1)
         ray.shutdown()
 
     else:
-        trainer_agent = trainer.Agent(config, input_data)
+        trainer_agent = imitator.Agent(config, input_data)
         trainer_agent.imitate()
 
 
