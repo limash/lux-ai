@@ -50,7 +50,7 @@ def to_tfrecord_for_rl(actions_numbers, actions_probs, observations, rewards, ma
     return tf.train.Example(features=tf.train.Features(feature=feature))
 
 
-def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None):
+def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, collector_n=None):
     if is_for_rl:
         if save_path is None:
             save_path = "data/tfrecords/rl/storage/"
@@ -61,7 +61,10 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None):
             if out_file is None or n % 10 == 0:
                 if out_file is not None:
                     out_file.close()
-                filename = f"{save_path}{record_name}_{n}.tfrec"
+                if collector_n is not None:
+                    filename = f"{save_path}{collector_n}_{record_name}_{n}.tfrec"
+                else:
+                    filename = f"{save_path}{record_name}_{n}.tfrec"
                 out_file = tf.io.TFRecordWriter(filename)
             s_actions_numbers = tf.io.serialize_tensor(actions_numbers)
             # s_actions_probs = tf.io.serialize_tensor(actions_probs)
@@ -91,7 +94,10 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None):
             if out_file is None or n % 3000 == 0:
                 if out_file is not None:
                     out_file.close()
-                filename = f"{save_path}{record_name}_{n}.tfrec"
+                if collector_n is not None:
+                    filename = f"{save_path}{collector_n}_{record_name}_{n}.tfrec"
+                else:
+                    filename = f"{save_path}{record_name}_{n}.tfrec"
                 out_file = tf.io.TFRecordWriter(filename)
             serial_action_probs = [tf.io.serialize_tensor(item).numpy() for item in action_probs]
             serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
@@ -104,7 +110,7 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None):
 
 def record(player1_data, player2_data, final_reward_1, final_reward_2,
            feature_maps_shape, actions_shape, record_number, record_name,
-           progress=None, is_for_rl=False, save_path=None):
+           progress=None, is_for_rl=False, save_path=None, collector_n=None):
     def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
@@ -260,7 +266,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
             ))
 
     # foo = list(dataset.take(1))
-    write_tfrecord(dataset, record_number, record_name, is_for_rl, save_path)
+    write_tfrecord(dataset, record_number, record_name, is_for_rl, save_path, collector_n)
 
 
 def up_down(obs, probs):

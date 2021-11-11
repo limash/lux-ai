@@ -1,6 +1,6 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "imitate",
+    "setup": "collect",
     "model_name": "actor_critic_residual_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
@@ -12,6 +12,12 @@ CONF_Scrape = {
     "is_for_rl": False,
     "team_name": "Toad Brigade",
     "only_wins": False,
+}
+
+CONF_Collect = {
+    "for_imitator": True,
+    "is_for_rl": False,
+    "only_wins": True,
 }
 
 CONF_Evaluate = {

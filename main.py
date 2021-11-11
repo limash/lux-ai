@@ -10,7 +10,7 @@ import ray
 
 from lux_ai import scraper, collector, evaluator, imitator, trainer, tools
 from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
-from run_configuration import CONF_Scrape, CONF_RL, CONF_Main, CONF_Imitate, CONF_Evaluate
+from run_configuration import CONF_Scrape, CONF_Collect, CONF_RL, CONF_Main, CONF_Imitate, CONF_Evaluate
 
 
 def scrape():
@@ -71,12 +71,16 @@ def scrape():
 
 
 def collect(input_data):
-    config = {**CONF_Main}
+    config = {**CONF_Main, **CONF_Collect}
+    if config["for_imitator"]:
+        data_path = "data/tfrecords/imitator/storage_0/"
+    elif config["for_rl"]:
+        data_path = "data/tfrecords/rl/learn_a/"
+    else:
+        raise NotImplementedError
 
-    for i in range(100):
-        p = Process(target=collector.collect_and_store, args=(i, config, input_data))
-        p.start()
-        p.join()
+    # collector.collect_and_store(0, config, input_data, data_path, 1)
+    collector.hundred_sep_collect(config, input_data, data_path, 9)
 
 
 def evaluate(input_data):

@@ -1,4 +1,5 @@
 import abc
+from multiprocessing import Process
 
 import tensorflow as tf
 import gym
@@ -46,6 +47,8 @@ class Agent(abc.ABC):
         # self._collector_id = collector_id
         # self._workers_info = workers_info
         # self._num_collectors = num_collectors
+        self._only_wins = config["only_wins"]
+        self._is_for_rl = config["is_for_rl"]
 
     def _collect(self, agent):
         """
@@ -100,18 +103,36 @@ class Agent(abc.ABC):
         else:
             final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
 
-        return (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+        if self._only_wins:
+            if reward1 > reward2:
+                output = (player1_data, None), (final_reward_1, None), progress
+            elif reward1 < reward2:
+                output = (None, player2_data), (None, final_reward_2), progress
+            else:
+                output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+        else:
+            output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+
+        return output
 
     def collect_once(self):
         return self._collect(self._agent)
 
-    def collect_and_store(self, collect_n, data_path):
+    def collect_and_store(self, collect_n, data_path, collector_n):
         (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
         tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                                  self._feature_maps_shape, self._actions_shape, collect_n,
-                                 collect_n, progress, is_for_rl=True, save_path=data_path)
+                                 collect_n, progress,
+                                 is_for_rl=self._is_for_rl, save_path=data_path, collector_n=collector_n)
 
 
-def collect_and_store(n, conf, in_data, data_path="data/tfrecords/rl/learn_a/"):
+def collect_and_store(iteration, conf, in_data, data_path, collector_n):
     collect_agent = Agent(conf, in_data)
-    collect_agent.collect_and_store(n, data_path)
+    collect_agent.collect_and_store(iteration, data_path, collector_n)
+
+
+def hundred_sep_collect(config, input_data, data_path, collector_n):
+    for i in range(100):
+        p = Process(target=collect_and_store, args=(i, config, input_data, data_path, collector_n))
+        p.start()
+        p.join()
