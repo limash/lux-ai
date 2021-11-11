@@ -271,21 +271,15 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
 
 def up_down(obs, probs):
     obs = tf.reverse(obs, [0])
-    if probs[0][0] == 1 or probs[0][1] == 1:
-        if probs[1][0] == 1:
-            probs[1] = tf.constant([0, 0, 1, 0], dtype=tf.float32)
-        elif probs[1][2] == 1:
-            probs[1] = tf.constant([1, 0, 0, 0], dtype=tf.float32)
+    moves = probs[1]
+    probs[1] = tf.stack([moves[2], moves[1], moves[0], moves[3]], axis=0)
     return obs, probs
 
 
 def left_right(obs, probs):
     obs = tf.reverse(obs, [1])
-    if probs[0][0] == 1 or probs[0][1] == 1:
-        if probs[1][1] == 1:
-            probs[1] = tf.constant([0, 0, 0, 1], dtype=tf.float32)
-        elif probs[1][3] == 1:
-            probs[1] = tf.constant([0, 1, 0, 0], dtype=tf.float32)
+    moves = probs[1]
+    probs[1] = tf.stack([moves[0], moves[3], moves[2], moves[1]], axis=0)
     return obs, probs
 
 
@@ -329,20 +323,28 @@ def split_movement_actions(observation, inputs):
 
 def merge_actions(observation, inputs):
     act_probs, dir_probs, res_probs, reward = inputs
-    if act_probs[0] == 1:  # movement action
-        movements = dir_probs
-    else:
-        movements = tf.constant([0, 0, 0, 0], dtype=tf.float32)
-    if act_probs[1] == 1 or act_probs[2] == 1:  # transfer of idle
-        idle = tf.constant([1, ], dtype=tf.float32)
-    else:
-        idle = tf.constant([0, ], dtype=tf.float32)
-    if act_probs[3] == 1:
-        bcity = tf.constant([1, ], dtype=tf.float32)
-    else:
-        bcity = tf.constant([0, ], dtype=tf.float32)
-    new_actions = tf.concat([movements, idle, bcity], axis=0)
-    return observation, (new_actions, reward)
+    movements = dir_probs * act_probs[0]
+    idle = act_probs[1:2] + act_probs[2:3]  # transfer + idle
+    bcity = act_probs[3:]
+    row_probs = tf.concat([movements, idle, bcity], axis=0)
+    row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
+    new_probs = tf.nn.softmax(row_logs)  # normalize action probs
+    if tf.reduce_any(tf.math.is_nan(new_probs)):
+        new_probs = row_probs
+    return observation, (new_probs, reward)
+
+
+def merge_actions_amplify(observation, inputs):
+    act_probs, dir_probs, res_probs, reward = inputs
+    movements = dir_probs * act_probs[0]
+    idle = act_probs[1:2] + act_probs[2:3]  # transfer + idle
+    bcity = act_probs[3:]
+    row_probs = tf.concat([movements, idle, bcity], axis=0)
+    row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
+    new_probs = tf.nn.softmax(row_logs*2)  # normalize and amplify action probs
+    if tf.reduce_any(tf.math.is_nan(new_probs)):
+        new_probs = row_probs
+    return observation, (new_probs, reward)
 
 
 def merge_actions_rl(act_numbers, act_probs, dir_probs, res_probs, observation, reward, mask, progress):
@@ -353,18 +355,6 @@ def merge_actions_rl(act_numbers, act_probs, dir_probs, res_probs, observation, 
         movements = dir_probs[i] * act_probs[i][0]
         idle = act_probs[i][1:2] + act_probs[i][2:3]  # transfer + idle
         bcity = act_probs[i][3:]
-        # if act_numbers[i][0] == 0:  # movement action
-        #     movements = dir_probs[i]
-        # else:
-        #     movements = tf.constant([0, 0, 0, 0], dtype=tf.float32)
-        # if act_numbers[i][0] == 1 or act_numbers[i][0] == 2:  # transfer of idle
-        #     idle = tf.constant([1, ], dtype=tf.float32)
-        # else:
-        #     idle = tf.constant([0, ], dtype=tf.float32)
-        # if act_numbers[i][0] == 3:  # build city
-        #     bcity = tf.constant([1, ], dtype=tf.float32)
-        # else:
-        #     bcity = tf.constant([0, ], dtype=tf.float32)
         row_probs = tf.concat([movements, idle, bcity], axis=0)
         row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
         row = tf.nn.softmax(row_logs)  # normalize action probs
@@ -376,7 +366,8 @@ def merge_actions_rl(act_numbers, act_probs, dir_probs, res_probs, observation, 
     return act_numbers, new_probs, observation, reward, mask, progress
 
 
-def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, path):
+def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, path,
+                              filenames=None, amplify_probs=False):
     # read from TFRecords. For optimal performance, read from multiple
     # TFRecord files at once and set the option experimental_deterministic = False
     # to allow order-altering optimizations.
@@ -421,9 +412,10 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     option_no_order = tf.data.Options()
     option_no_order.experimental_deterministic = False
 
-    filenames = tf.io.gfile.glob(path + "*.tfrec")
+    if filenames is None:
+        filenames = tf.io.gfile.glob(path + "*.tfrec")
 
-    # test_dataset = tf.data.Dataset.list_files(filenames[:12])
+    # test_dataset = tf.data.Dataset.list_files(filenames)
     # test_dataset = test_dataset.interleave(lambda x: tf.data.TFRecordDataset(x),
     #                                        cycle_length=5,
     #                                        num_parallel_calls=AUTO,
@@ -432,7 +424,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
     #     foo = random_reverse(*foo)
-    #     foo = merge_actions(*foo)
+    #     foo = merge_actions_amplify(*foo)
     #     # foo = split_movement_actions(*foo)
     #     count += 1
 
@@ -448,7 +440,10 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     if model_name == "actor_critic_residual_shrub":
         ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
     elif model_name == "actor_critic_residual_six_actions":
-        ds = ds.map(merge_actions, num_parallel_calls=AUTO)
+        if amplify_probs:
+            ds = ds.map(merge_actions_amplify, num_parallel_calls=AUTO)
+        else:
+            ds = ds.map(merge_actions, num_parallel_calls=AUTO)
     else:
         raise NotImplementedError
     ds = ds.shuffle(10000)

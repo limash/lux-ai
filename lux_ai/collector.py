@@ -1,11 +1,12 @@
-def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_out):
+def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_out, global_var_actor_out=None):
     import abc
+    import time
     from multiprocessing import Process
 
     import tensorflow as tf
     import gym
     # import reverb
-    # import ray
+    import ray
 
     import lux_gym.agents.agents as agents
     from lux_ai import tools, tfrecords_storage
@@ -129,7 +130,13 @@ def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_o
         collect_agent = Agent(conf, in_data)
         collect_agent.collect_and_store(iteration, data_path, collector_n)
 
-    for i in range(100):
+    for i in range(10):
         p = Process(target=collect_and_store, args=(i, config_out, input_data_out, data_path_out, collector_n_out))
         p.start()
         p.join()
+
+    if global_var_actor_out is not None:
+        ray.get(global_var_actor_out.set_done.remote(True))
+
+    print("Collecting is done.")
+    time.sleep(1)

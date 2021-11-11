@@ -116,6 +116,18 @@ class SaveWeightsCallback(tf.keras.callbacks.Callback):
         print(f"{epoch}.pickle is saved.")
 
 
+class StopOnDemand(tf.keras.callbacks.Callback):
+    def __init__(self, global_var_actor):
+        super(StopOnDemand, self).__init__()
+
+        self._global_var_actor = global_var_actor
+
+    def on_epoch_end(self, epoch, logs=None):
+        is_done = ray.get(self._global_var_actor.get_done.remote())
+        if is_done:
+            self.model.stop_training = True
+
+
 def add_point(player_data, actions_dict, actions_probs, proc_obs, current_step):
     for i, (acts, acts_prob, obs) in enumerate(zip(actions_dict.values(),
                                                    actions_probs.values(),

@@ -3,8 +3,6 @@ import glob
 import random
 import pathlib
 import time
-from multiprocessing import Process
-
 
 import ray
 
@@ -95,9 +93,55 @@ def evaluate(input_data):
 
 
 def imitate(input_data):
-    config = {**CONF_Main, **CONF_Imitate, **CONF_Evaluate}
+    config = {**CONF_Main, **CONF_Imitate, **CONF_Evaluate, **CONF_Collect}
 
-    if config["with_evaluation"]:
+    if config["self_imitation"]:
+        prev_n = 2
+        for i in range(10):
+            print(f"Self imitation, cycle {i}.")
+            current_n = i % 3  # current and prev to use
+            next_n = (i + 1) % 3  # next to collect
+            data_path = f"data/tfrecords/imitator/storage_{next_n}/"
+            fnames_train = glob.glob("data/tfrecords/imitator/train/*.tfrec")
+            fnames_curr = glob.glob(f"data/tfrecords/imitator/storage_{current_n}/*.tfrec")
+            fnames_prev = glob.glob(f"data/tfrecords/imitator/storage_{prev_n}/*.tfrec")
+            self_exp_n = len(fnames_curr) + len(fnames_prev)
+            fnames_train = random.choices(fnames_train, k=self_exp_n)
+            filenames = fnames_train + fnames_prev + fnames_curr
+
+            files = glob.glob("./data/weights/*.pickle")
+            if len(files) > 0:
+                with open(files[-1], 'rb') as datafile:
+                    input_data = pickle.load(datafile)
+                    raw_name = pathlib.Path(files[-1]).stem
+                    print(f"Training and collecting from {raw_name}.pickle weights.")
+
+            # trainer_agent = imitator.Agent(config, input_data, filenames=filenames)
+            # trainer_agent.self_imitate()
+
+            ray.init(num_gpus=1, include_dashboard=False)
+            # remote objects creation
+            trainer_object = ray.remote(num_gpus=1)(imitator.Agent)
+            eval_object = ray.remote(evaluator.Agent)
+            collector_object = ray.remote(collector.hundred_sep_collect)
+            # initialization
+            workers_info = tools.GlobalVarActor.remote()
+            imitator_agent = trainer_object.remote(config, input_data, workers_info, filenames)
+            eval_agent = eval_object.remote(config, input_data, workers_info)
+            # remote call
+            trainer_future = imitator_agent.self_imitate.remote()
+            eval_future = eval_agent.evaluate.remote()
+            col_futures = [collector_object.remote(config, input_data, data_path, j, global_var_actor_out=workers_info)
+                           for j in range(2)]
+            # getting results from remote functions
+            _ = ray.get(trainer_future)
+            _ = ray.get(eval_future)
+            _ = ray.get(col_futures)
+            time.sleep(1)
+            ray.shutdown()
+            prev_n = current_n
+            time.sleep(5)
+    elif config["with_evaluation"]:
         ray.init(num_gpus=1, include_dashboard=False)
         # remote objects creation
         trainer_object = ray.remote(num_gpus=1)(imitator.Agent)
@@ -114,7 +158,6 @@ def imitate(input_data):
         _ = ray.get(eval_future)
         time.sleep(1)
         ray.shutdown()
-
     else:
         trainer_agent = imitator.Agent(config, input_data)
         trainer_agent.imitate()

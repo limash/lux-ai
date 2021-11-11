@@ -11,7 +11,7 @@ from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 
 
 class Agent(abc.ABC):
-    def __init__(self, config, data, global_var_actor=None):
+    def __init__(self, config, data, global_var_actor=None, filenames=None):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = [item.shape for item in empty_worker_action_vectors]
@@ -39,7 +39,8 @@ class Agent(abc.ABC):
             self._model.set_weights(data['weights'])
             print("Continue the model training.")
 
-        self._global_var_actor = global_var_actor if global_var_actor else None
+        self._global_var_actor = global_var_actor
+        self._filenames = filenames
 
         # self._dataset = reverb.TrajectoryDataset.from_table_signature(
         #     server_address=f'localhost:{buffer_server_port}',
@@ -123,3 +124,56 @@ class Agent(abc.ABC):
         print("Imitation is done.")
         time.sleep(1)
 
+    def self_imitate(self):
+        ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
+                                                               self._model_name,
+                                                               "_0^0_",
+                                                               filenames=self._filenames,
+                                                               amplify_probs=True)
+        ds_train = ds_train.batch(self._batch_size).prefetch(1)  # , drop_remainder=True)
+
+        if self._model_name == "actor_critic_residual_shrub":
+            self._model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+                loss={
+                    "output_1": self._loss_function1,
+                    "output_2": self._loss_function2_0,
+                    "output_3": self._loss_function2_1,
+                    "output_4": self._loss_function3,
+                    "output_5": None  # tf.keras.losses.MeanSquaredError()
+                },
+                metrics={
+                    "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+                },
+            )
+        elif self._model_name == "actor_critic_residual_six_actions":
+            self._model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+                loss={
+                    "output_1": self._loss_function,
+                    "output_2": None,
+                },
+                metrics={
+                    "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+                },
+            )
+        else:
+            raise NotImplementedError
+
+        save_weights_callback = tools.SaveWeightsCallback()
+        stop_training = tools.StopOnDemand(self._global_var_actor)
+        self._model.fit(ds_train, epochs=10,  # validation_data=ds_valid,
+                        verbose=2,
+                        callbacks=[save_weights_callback, stop_training]
+                        )
+        # weights = self._model.get_weights()
+        # data = {
+        #     'weights': weights,
+        # }
+        # with open(f'data/data.pickle', 'wb') as f:
+        #     pickle.dump(data, f, protocol=4)
+
+        # if self._global_var_actor is not None:
+        #     ray.get(self._global_var_actor.set_done.remote(True))
+        print("Imitation is done.")
+        time.sleep(1)
