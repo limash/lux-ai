@@ -80,7 +80,12 @@ def collect(input_data):
         raise NotImplementedError
 
     # collector.collect_and_store(0, config, input_data, data_path, 1)
-    collector.hundred_sep_collect(config, input_data, data_path, 9)
+    # collector.hundred_sep_collect(config, input_data, data_path, 9)
+    ray.init(include_dashboard=False)
+    collector_object = ray.remote(collector.hundred_sep_collect)
+    futures = [collector_object.remote(config, input_data, data_path, j) for j in range(2)]
+    _ = ray.get(futures)
+    ray.shutdown()
 
 
 def evaluate(input_data):
