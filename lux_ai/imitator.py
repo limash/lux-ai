@@ -11,7 +11,7 @@ from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 
 
 class Agent(abc.ABC):
-    def __init__(self, config, data, global_var_actor=None, filenames=None):
+    def __init__(self, config, data, global_var_actor=None, filenames=None, current_cycle=None):
 
         self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
         self._actions_shape = [item.shape for item in empty_worker_action_vectors]
@@ -41,6 +41,7 @@ class Agent(abc.ABC):
 
         self._global_var_actor = global_var_actor
         self._filenames = filenames
+        self._current_cycle = current_cycle
 
         # self._dataset = reverb.TrajectoryDataset.from_table_signature(
         #     server_address=f'localhost:{buffer_server_port}',
@@ -132,6 +133,13 @@ class Agent(abc.ABC):
                                                                amplify_probs=True)
         ds_train = ds_train.batch(self._batch_size).prefetch(1)  # , drop_remainder=True)
 
+        # for sample in ds_train.take(10):
+        #     observations = sample[0].numpy()
+        #     actions_probs0 = sample[1][0].numpy()
+        #     total_rewards = sample[1][1].numpy()
+        #     probs_output, value_output = self._model(observations)
+        #     probs_output_v = probs_output.numpy()
+
         if self._model_name == "actor_critic_residual_shrub":
             self._model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
@@ -160,20 +168,17 @@ class Agent(abc.ABC):
         else:
             raise NotImplementedError
 
-        save_weights_callback = tools.SaveWeightsCallback()
         stop_training = tools.StopOnDemand(self._global_var_actor)
         self._model.fit(ds_train, epochs=10,  # validation_data=ds_valid,
                         verbose=2,
-                        callbacks=[save_weights_callback, stop_training]
+                        callbacks=[stop_training, ]
                         )
-        # weights = self._model.get_weights()
-        # data = {
-        #     'weights': weights,
-        # }
-        # with open(f'data/data.pickle', 'wb') as f:
-        #     pickle.dump(data, f, protocol=4)
-
-        # if self._global_var_actor is not None:
-        #     ray.get(self._global_var_actor.set_done.remote(True))
+        weights = self._model.get_weights()
+        data = {
+            'weights': weights,
+        }
+        with open(f'data/weights/{self._current_cycle}.pickle', 'wb') as f:
+            pickle.dump(data, f, protocol=4)
+        print(f"{self._current_cycle}.pickle is saved.")
         print("Imitation is done.")
         time.sleep(1)

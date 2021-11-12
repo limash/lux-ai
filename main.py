@@ -116,7 +116,7 @@ def imitate(input_data):
                     raw_name = pathlib.Path(files[-1]).stem
                     print(f"Training and collecting from {raw_name}.pickle weights.")
 
-            # trainer_agent = imitator.Agent(config, input_data, filenames=filenames)
+            # trainer_agent = imitator.Agent(config, input_data, filenames=filenames, current_cycle=i)
             # trainer_agent.self_imitate()
 
             ray.init(num_gpus=1, include_dashboard=False)
@@ -126,7 +126,7 @@ def imitate(input_data):
             collector_object = ray.remote(collector.hundred_sep_collect)
             # initialization
             workers_info = tools.GlobalVarActor.remote()
-            imitator_agent = trainer_object.remote(config, input_data, workers_info, filenames)
+            imitator_agent = trainer_object.remote(config, input_data, workers_info, filenames, i)
             eval_agent = eval_object.remote(config, input_data, workers_info)
             # remote call
             trainer_future = imitator_agent.self_imitate.remote()
