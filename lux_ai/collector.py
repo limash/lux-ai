@@ -50,6 +50,7 @@ def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_o
             # self._num_collectors = num_collectors
             self._only_wins = config["only_wins"]
             self._is_for_rl = config["is_for_rl"]
+            self._is_pg_rl = config["is_pg_rl"]
 
         def _collect(self, agent):
             """
@@ -124,7 +125,8 @@ def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_o
             tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                                      self._feature_maps_shape, self._actions_shape, collect_n,
                                      collect_n, progress,
-                                     is_for_rl=self._is_for_rl, save_path=data_path, collector_n=collector_n)
+                                     is_for_rl=self._is_for_rl, save_path=data_path, collector_n=collector_n,
+                                     is_pg_rl=self._is_pg_rl)
 
     def collect_and_store(iteration, conf, in_data, data_path, collector_n):
         collect_agent = Agent(conf, in_data)
