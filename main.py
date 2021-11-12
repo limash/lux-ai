@@ -70,15 +70,15 @@ def scrape():
 
 def collect(input_data):
     config = {**CONF_Main, **CONF_Collect}
-    if config["for_imitator"]:
+    if config["is_for_imitator"]:
         data_path = "data/tfrecords/imitator/storage_0/"
-    elif config["for_rl"]:
-        data_path = "data/tfrecords/rl/learn_a/"
+    elif config["is_for_rl"]:
+        data_path = "data/tfrecords/rl/storage_0/"
     else:
         raise NotImplementedError
 
-    # collector.collect_and_store(0, config, input_data, data_path, 1)
     # collector.hundred_sep_collect(config, input_data, data_path, 9)
+
     ray.init(include_dashboard=False)
     collector_object = ray.remote(collector.hundred_sep_collect)
     futures = [collector_object.remote(config, input_data, data_path, j) for j in range(2)]
