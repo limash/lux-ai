@@ -69,73 +69,16 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
             self._current_cycle = current_cycle
             self._global_var_actor = global_var_actor if global_var_actor else None
 
-        def _training_step(self, actions, behaviour_policy_probs, observations, total_rewards, masks, progress):
+        def _training_step(self, actions, behaviour_policy_probs, observations, total_rewards,  progress):
             print("Tracing")
-
-            actions = tf.where(tf.cast(masks, dtype=tf.int32) == 0, -1, tf.cast(actions, dtype=tf.int32))
-            foo_ones = tf.ones([1, self._n_points])
-            foo_rewards = total_rewards[:, :1]
-            total_rewards = foo_rewards * foo_ones
-
-            loss_weights_n = tf.where(actions == 0, 1., 0.)
-            loss_weights_e = tf.where(actions == 1, 1., 0.)
-            loss_weights_s = tf.where(actions == 2, 1., 0.)
-            loss_weights_w = tf.where(actions == 3, 1., 0.)
-            loss_weights_idle = tf.where(actions == 4, 0.1, 0.)
-            loss_weights_bcity = tf.where(actions == 5, 2., 0.)
-            loss_weights = (loss_weights_n + loss_weights_e + loss_weights_s + loss_weights_w +
-                            loss_weights_idle + loss_weights_bcity)
 
             if self._is_debug:
                 actions_v = actions.numpy()
                 behaviour_policy_probs_v = behaviour_policy_probs.numpy()
                 observations_v = observations.numpy()
                 total_rewards_v = total_rewards.numpy()
-                masks_v = masks.numpy()
                 progress_v = progress.numpy()
-                loss_weights_v = loss_weights.numpy()
 
-            # actions = tf.transpose(actions)
-            # behaviour_policy_logits = tf.transpose(behaviour_policy_logits, perm=[1, 0, 2])
-            # maps = tf.transpose(observations[0], perm=[1, 0, 2, 3, 4])
-            # scalars = tf.transpose(observations[1], perm=[1, 0, 2])
-            # rewards = tf.transpose(rewards)
-            # dones = tf.transpose(dones)
-
-            # nsteps = tf.argmax(dones, axis=0, output_type=tf.int32)
-            # ta = tf.TensorArray(dtype=tf.float32, size=self._sample_batch_size, dynamic_size=False)
-            # for i in tf.range(self._sample_batch_size):
-            #     row = tf.concat([tf.constant([0.]),
-            #                      tf.linspace(0., 1., nsteps[i] + 1)[:-1],
-            #                      tf.ones(steps - nsteps[i] - 1)], axis=0)
-            #     ta = ta.write(i, row)
-            # progress = ta.stack()
-            # progress = tf.transpose(progress)
-
-            # prepare a mask for the valid time steps
-            # alive_positions = tf.where(actions != -1)
-            # ones_array = tf.ones(alive_positions.shape[0])
-            # mask = tf.scatter_nd(alive_positions, ones_array, actions.shape)
-            # mask2d = tf.where(actions == -1, 0., 1.)
-            # mask2d = tf.concat((tf.zeros([tf.shape(dones)[0], 1]), (tf.ones_like(dones) - dones)[:, :-1]), axis=1)
-            # e_mask = tf.concat((tf.zeros([tf.shape(episode_dones)[0], 1]),
-            #                     (tf.ones_like(episode_dones) - episode_dones)[:, :-1]), axis=1)
-            # mask3d = tf.where(behaviour_policy_logits == 0., 0., 1.)
-            mask2d = masks
-            mask3d = tf.transpose(tf.ones([self._model_actions_shape, 1, 1], dtype=tf.float32) * mask2d, perm=[1, 2, 0])
-            if self._is_debug:
-                mask2d_v = mask2d.numpy()
-                mask3d_v = mask3d.numpy()
-            # e_mask_v = e_mask.numpy()
-
-            # get final rewards, currently there is the only reward in the end of a game
-            # returns = total_rewards[-1, :]
-
-            # behaviour_action_log_probs = -tf.nn.sparse_softmax_cross_entropy_with_logits(
-            #     logits=behaviour_policy_logits,
-            #     labels=actions
-            # )
-            # it is almost similar to above line, but above probably won't work on cpus (due to -1 actions)
             behaviour_action_log_probs = tools.get_prob_logs_from_probs(behaviour_policy_probs, actions,
                                                                         self._model_actions_shape)
             if self._is_debug:
@@ -143,17 +86,6 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
 
             with tf.GradientTape() as tape:
                 maps = observations
-                if self._is_debug:
-                    maps_v = maps.numpy()
-                # there are two ways to get outputs from the model
-                # 1: using map_fn along the time dimension (or whatever), it is slow but consumes less memory
-                # logits, values = tf.map_fn(self._model, (maps, scalars),
-                #                            fn_output_signature=[tf.TensorSpec((self._sample_batch_size,
-                #                                                                self._n_outputs), dtype=tf.float32),
-                #                                                 tf.TensorSpec((self._sample_batch_size, 1),
-                #                                                               dtype=tf.float32)])
-                # -
-                # 2: merging time and batch dimensions and applying the model at once, it is fast, requires gpu memory
                 maps_shape = tf.shape(maps)
                 # scalars_shape = tf.shape(scalars)
                 maps_merged = tf.reshape(maps, (-1, maps_shape[2], maps_shape[3], maps_shape[4]))
@@ -246,19 +178,19 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
             else:
                 save_path = f'data/weights/data.pickle'
 
-            # ds_learn = tfrecords_storage.read_records_for_rl_pg(
-            #     self._feature_maps_shape, self._actions_shape, self._model_name,
-            #     "data/tfrecords/rl/storage_0/"
-            # )
+            ds_learn = tfrecords_storage.read_records_for_rl_pg(
+                self._feature_maps_shape, self._actions_shape, self._model_name,
+                "data/tfrecords/rl/storage_0/"
+            )
             ds_storage = tfrecords_storage.read_records_for_rl_pg(
                 self._feature_maps_shape, self._actions_shape, self._model_name,
                 "data/tfrecords/rl/storage/"
             )
-            # ds_learn = ds_learn.batch(self._batch_size).prefetch(1)
+            ds_learn = ds_learn.batch(self._batch_size).prefetch(1)
             ds_storage = ds_storage.batch(self._batch_size).prefetch(1)
 
             storage_iterator = iter(ds_storage)
-            # learn_iterator = iter(ds_learn)
+            learn_iterator = iter(ds_learn)
             # for step_counter in range(1, self._iterations_number + 1):
             for step_counter in itertools.count(1):
                 # sampling

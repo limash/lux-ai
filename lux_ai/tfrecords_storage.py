@@ -421,17 +421,33 @@ def random_reverse(observations, inputs):
 def random_reverse_pg(act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress):
     probs = [act_probs, dir_probs, res_probs]
 
+    new_act_numbers = act_numbers
     trigger = np.random.choice(np.array([0, 1, 2, 3]))
     if trigger == 1:
         observations, probs = up_down(observations, probs)
+        if act_numbers[1] == 0:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(2, dtype=tf.int32), act_numbers[2]], axis=0)
+        elif act_numbers[1] == 2:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(0, dtype=tf.int32), act_numbers[2]], axis=0)
     elif trigger == 2:
         observations, probs = left_right(observations, probs)
+        if act_numbers[1] == 1:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(3, dtype=tf.int32), act_numbers[2]], axis=0)
+        elif act_numbers[1] == 3:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(1, dtype=tf.int32), act_numbers[2]], axis=0)
     elif trigger == 3:
         observations, probs = up_down(observations, probs)
         observations, probs = left_right(observations, probs)
+        if act_numbers[1] == 0:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(2, dtype=tf.int32), act_numbers[2]], axis=0)
+        elif act_numbers[1] == 2:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(0, dtype=tf.int32), act_numbers[2]], axis=0)
+        elif act_numbers[1] == 1:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(3, dtype=tf.int32), act_numbers[2]], axis=0)
+        elif act_numbers[1] == 3:
+            new_act_numbers = tf.stack([act_numbers[0], tf.constant(1, dtype=tf.int32), act_numbers[2]], axis=0)
 
     act_probs, dir_probs, res_probs = probs
-    new_act_numbers = tf.stack([act_numbers[0], tf.argmax(dir_probs, output_type=tf.int32), act_numbers[2]], axis=0)
     return new_act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress
 
 
@@ -469,7 +485,23 @@ def merge_actions_pg(act_numbers, act_probs, dir_probs, res_probs, observations,
     new_probs = tf.nn.softmax(row_logs)  # normalize action probs
     if tf.reduce_any(tf.math.is_nan(new_probs)):
         new_probs = row_probs
-    act_number = tf.argmax(new_probs)
+    if act_numbers[0] == 0:
+        if act_numbers[1] == 0:
+            act_number = 0
+        elif act_numbers[1] == 1:
+            act_number = 1
+        elif act_numbers[1] == 2:
+            act_number = 2
+        elif act_numbers[1] == 3:
+            act_number = 3
+        else:
+            act_number = -1
+    elif act_numbers[0] == 2:
+        act_number = 4
+    elif act_numbers[0] == 3:
+        act_number = 5
+    else:
+        act_number = -1
     return act_number, new_probs, observations, reward, progress
 
 
