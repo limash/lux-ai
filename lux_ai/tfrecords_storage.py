@@ -110,7 +110,7 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, co
 
 def record(player1_data, player2_data, final_reward_1, final_reward_2,
            feature_maps_shape, actions_shape, record_number, record_name,
-           progress=None, is_for_rl=False, save_path=None, collector_n=None):
+           progress=None, is_for_rl=False, save_path=None, collector_n=None, is_pg_rl=False):
     def data_gen_all():
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
@@ -148,11 +148,6 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 unit_type = key.split("_")[0]
                 if unit_type != "u":
                     continue
-                # actions = unit.actions
-                # counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
-                # create np arrays to store data
-                # actions_numbers = -np.ones([total_len])
-                # actions_probs = np.zeros([total_len] + list(actions.shape))
                 actions_numbers = -np.ones([total_len] + [len(unit.data[0][1])])
                 actions_probs = [np.zeros([total_len] + list(item.shape)) for item in unit.data[0][1]]
                 observations = np.zeros([total_len] + list(unit.data[0][2].shape))
@@ -161,10 +156,6 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 progress_array = np.zeros([total_len])
                 i = 0
                 for i, point in enumerate(unit.data):
-                    # point [action, action_probs, observation]
-                    # actions_numbers[i] = np.argmax(point[0])
-                    # actions_probs[i] = point[1]
-                    # actions_numbers[i] = np.array([np.argmax(item) for item in point[0]])
                     for n, item in enumerate(point[0]):
                         non_zeros = np.count_nonzero(item)
                         if non_zeros:
@@ -175,7 +166,6 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                     rewards[i] = final_reward
                     masks[i] = 1
                     progress_array[i] = progress[unit.step[i]].numpy()
-                    # counters += point[0]
                 # cast to tf tensors
                 actions_numbers = tf.constant(actions_numbers, dtype=tf.int16)
                 actions_probs = tuple([tf.constant(item, dtype=tf.float16) for item in actions_probs])
@@ -188,8 +178,6 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 yield actions_numbers, actions_probs, observations, rewards, masks, progress_array, final_idx
 
     def data_gen_soft():
-        """Generator, which softens very skewed distribution of actions
-        repeating rare and skipping very often actions"""
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
                 continue
@@ -237,9 +225,81 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                     if idx == final_idx:
                         break
 
+    def data_gen_soft_for_pg_no_transfers():
+        for j, player_data in enumerate((player1_data, player2_data)):
+            if player_data is None:
+                continue
+            final_reward = final_reward_1 if j == 0 else final_reward_2
+            for key, unit in player_data.items():
+                unit_type = key.split("_")[0]
+                if unit_type != "u":
+                    continue
+                actions = unit.actions
+                movements_average = actions[0] / 4
+                idle_prob = movements_average / actions[2] if actions[2] > 0 else 1.
+                build_multiplier = movements_average / actions[3] if actions[3] > 0 else 1.
+                counters = np.zeros_like(actions)  # for debug, shows points with actions yielded
+                build_repeat_counter = 0
+                final_idx = len(unit.data)
+                idx = 0
+                while True:
+                    # point [action_vectors, action_vectors_probs, observation]
+                    point = unit.data[idx]
+                    progress_array = progress[unit.step[idx]].numpy()
+
+                    action_vectors = point[0]
+                    # choice
+                    general_actions = action_vectors[0]
+                    act_index = np.argmax(general_actions)
+                    if act_index == 1:  # transfer to skip
+                        idx += 1
+                        if idx == final_idx:
+                            break
+                        continue
+                    elif act_index == 2:  # idle
+                        if idle_prob > 1:
+                            current_idle_prob = 1.
+                        else:
+                            current_idle_prob = max(0.15, (2 * (final_idx - idx) / final_idx) * idle_prob)
+                        if random.random() > current_idle_prob:
+                            idx += 1
+                            if idx == final_idx:
+                                break
+                            continue
+                    elif act_index == 3:  # bcity
+                        if random.random() > 1 / build_multiplier:
+                            idx -= 1
+                            build_repeat_counter += 1
+                            if build_repeat_counter > 6:  # do not repeat too much
+                                idx += 1
+                                build_repeat_counter = 0
+
+                    #
+                    actions_numbers = -np.ones(len(action_vectors))
+                    for n, item in enumerate(action_vectors):
+                        non_zeros = np.count_nonzero(item)
+                        if non_zeros:
+                            actions_numbers[n] = np.argmax(item)
+                    actions_numbers = tf.constant(actions_numbers, dtype=tf.int16)
+                    #
+                    actions_probs = tuple([tf.constant(item, dtype=tf.float16) for item in point[1]])
+                    #
+                    observation = tf.sparse.from_dense(tf.constant(point[2], dtype=tf.float16))
+                    #
+                    reward = tf.constant(final_reward, dtype=tf.float16)
+                    #
+                    progress_array = tf.constant(progress_array, dtype=tf.float16)
+                    #
+                    yield actions_numbers, actions_probs, observation, reward, progress_array
+                    counters += general_actions
+
+                    idx += 1
+                    if idx == final_idx:
+                        break
+
     # result = []
-    # generator = data_gen_all_for_rl()
-    # while len(result) < 1000:
+    # generator = data_gen_soft_for_pg_no_transfers()
+    # while len(result) < 10000:
     #     x = next(generator)
     #     result.append(x)
 

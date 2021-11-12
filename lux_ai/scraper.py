@@ -376,6 +376,7 @@ class Agent(abc.ABC):
         # self._num_collectors = num_collectors
 
         self._is_for_rl = config["is_for_rl"]
+        self._is_pg_rl = config["is_pg_rl"]
         self._lux_version = config["lux_version"]
         self._team_name = config["team_name"]
         self._only_wins = config["only_wins"]
@@ -446,7 +447,8 @@ class Agent(abc.ABC):
             tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                                      self._feature_maps_shape, self._actions_shape, i,
                                      raw_name + "_" + self._team_name, progress,
-                                     self._is_for_rl)
+                                     self._is_for_rl,
+                                     is_pg_rl=self._is_pg_rl)
             j += 1
             if j == files_to_save:
                 print(f"{files_to_save} files saved, exit.")
