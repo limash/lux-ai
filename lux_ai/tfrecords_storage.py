@@ -50,11 +50,50 @@ def to_tfrecord_for_rl(actions_numbers, actions_probs, observations, rewards, ma
     return tf.train.Example(features=tf.train.Features(feature=feature))
 
 
-def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, collector_n=None):
-    if is_for_rl:
+def to_tfrecord_for_rl_pg(action_numbers, action_probs, observation, reward, progress_value):
+    feature = {
+        "action_numbers": _bytestring_feature([action_numbers]),
+        "action_probs_1": _bytestring_feature([action_probs[0]]),
+        "action_probs_2": _bytestring_feature([action_probs[1]]),
+        "action_probs_3": _bytestring_feature([action_probs[2]]),
+        "observation": _bytestring_feature([observation]),
+        "reward": _float_feature([reward]),
+        "progress_value": _float_feature([progress_value]),
+    }
+    return tf.train.Example(features=tf.train.Features(feature=feature))
+
+
+def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, collector_n=None,
+                   is_pg_rl=False):
+    if is_pg_rl:
         if save_path is None:
             save_path = "data/tfrecords/rl/storage/"
-        # with tf.io.TFRecordWriter(filename) as out_file:
+        out_file = None
+        for n, (action_numbers, action_probs, observation, reward, progress_value) in enumerate(ds):
+            if out_file is None or n % 3000 == 0:
+                if out_file is not None:
+                    out_file.close()
+                if collector_n is not None:
+                    filename = f"{save_path}{collector_n}_{record_name}_{n}.tfrec"
+                else:
+                    filename = f"{save_path}{record_name}_{n}.tfrec"
+                out_file = tf.io.TFRecordWriter(filename)
+            s_action_numbers = tf.io.serialize_tensor(action_numbers)
+            serial_action_probs = [tf.io.serialize_tensor(item).numpy() for item in action_probs]
+            serial_observation = tf.io.serialize_tensor(tf.io.serialize_sparse(observation))
+            example = to_tfrecord_for_rl_pg(
+                s_action_numbers.numpy(),
+                serial_action_probs,
+                serial_observation.numpy(),
+                reward.numpy().astype(np.float32),
+                progress_value.numpy().astype(np.float32),
+            )
+            out_file.write(example.SerializeToString())
+        out_file.close()
+        print(f"Wrote group #{record_number} {record_name} tfrec files containing {n} records")
+    elif is_for_rl:
+        if save_path is None:
+            save_path = "data/tfrecords/rl/storage/"
         out_file = None
         for n, (actions_numbers, actions_probs, observations, rewards,
                 masks, progress_array, final_idx) in enumerate(ds):
@@ -67,13 +106,11 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, co
                     filename = f"{save_path}{record_name}_{n}.tfrec"
                 out_file = tf.io.TFRecordWriter(filename)
             s_actions_numbers = tf.io.serialize_tensor(actions_numbers)
-            # s_actions_probs = tf.io.serialize_tensor(actions_probs)
             serial_action_probs = [tf.io.serialize_tensor(item).numpy() for item in actions_probs]
             s_observations = tf.io.serialize_tensor(tf.io.serialize_sparse(observations))
             s_rewards = tf.io.serialize_tensor(rewards)
             s_masks = tf.io.serialize_tensor(masks)
             s_progress_array = tf.io.serialize_tensor(progress_array)
-            # s_final_idx = tf.io.serialize_tensor(final_idx)
             example = to_tfrecord_for_rl(
                 s_actions_numbers.numpy(),
                 serial_action_probs,
@@ -85,6 +122,7 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, co
             )
             out_file.write(example.SerializeToString())
         out_file.close()
+        print(f"Wrote group #{record_number} {record_name} tfrec files containing {n} records")
     else:
         if save_path is None:
             save_path = "data/tfrecords/imitator/train/"
@@ -105,6 +143,7 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, co
                                   serial_action_probs,
                                   serial_observation.numpy())
             out_file.write(example.SerializeToString())
+        out_file.close()
         print(f"Wrote group #{record_number} {record_name} tfrec files containing {n} records")
 
 
@@ -245,7 +284,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 while True:
                     # point [action_vectors, action_vectors_probs, observation]
                     point = unit.data[idx]
-                    progress_array = progress[unit.step[idx]].numpy()
+                    progress_value = progress[unit.step[idx]].numpy()
 
                     action_vectors = point[0]
                     # choice
@@ -288,9 +327,9 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                     #
                     reward = tf.constant(final_reward, dtype=tf.float16)
                     #
-                    progress_array = tf.constant(progress_array, dtype=tf.float16)
+                    progress_value = tf.constant(progress_value, dtype=tf.float16)
                     #
-                    yield actions_numbers, actions_probs, observation, reward, progress_array
+                    yield actions_numbers, actions_probs, observation, reward, progress_value
                     counters += general_actions
 
                     idx += 1
@@ -303,7 +342,17 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
     #     x = next(generator)
     #     result.append(x)
 
-    if is_for_rl:
+    if is_pg_rl:
+        dataset = tf.data.Dataset.from_generator(
+            data_gen_soft_for_pg_no_transfers,
+            output_signature=(
+                tf.TensorSpec(shape=len(actions_shape), dtype=tf.int16),
+                tuple([tf.TensorSpec(shape=actions_number, dtype=tf.float16) for actions_number in actions_shape]),
+                tf.SparseTensorSpec(shape=feature_maps_shape, dtype=tf.float16),
+                tf.TensorSpec(shape=(), dtype=tf.float16),
+                tf.TensorSpec(shape=(), dtype=tf.float16),
+            ))
+    elif is_for_rl:
         dataset = tf.data.Dataset.from_generator(
             data_gen_all_for_rl,
             output_signature=(
@@ -326,7 +375,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
             ))
 
     # foo = list(dataset.take(1))
-    write_tfrecord(dataset, record_number, record_name, is_for_rl, save_path, collector_n)
+    write_tfrecord(dataset, record_number, record_name, is_for_rl, save_path, collector_n, is_pg_rl)
 
 
 def up_down(obs, probs):

@@ -321,7 +321,7 @@ def scrape(env_name, data, team_name=None, only_wins=False):
 
 
 def scrape_file(env_name, file_name, team_name, lux_version, only_wins,
-                feature_maps_shape, acts_shape, record_number, is_for_rl):
+                feature_maps_shape, acts_shape, record_number, is_for_rl, is_pg_rl):
     with open(file_name, "r") as read_file:
         raw_name = pathlib.Path(file_name).stem
         data = json.load(read_file)
@@ -340,7 +340,8 @@ def scrape_file(env_name, file_name, team_name, lux_version, only_wins,
     tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                              feature_maps_shape, acts_shape, record_number,
                              raw_name + "_" + team_name, progress,
-                             is_for_rl)
+                             is_for_rl,
+                             is_pg_rl=is_pg_rl)
 
 
 class Agent(abc.ABC):

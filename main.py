@@ -27,6 +27,7 @@ def scrape():
         team_name = config["team_name"]
         only_wins = config["only_wins"]
         is_for_rl = config["is_for_rl"]
+        is_pg_rl = config["is_pg_rl"]
         files_pool = set(glob.glob("./data/jsons/*.json"))
         if is_for_rl:
             data_path = "./data/tfrecords/rl/storage/"
@@ -58,7 +59,7 @@ def scrape():
             ray.init(num_cpus=parallel_calls, include_dashboard=False)
             scraper_object = ray.remote(scraper.scrape_file)
             futures = [scraper_object.remote(env_name, file_names[j], team_name, lux_version, only_wins,
-                                             feature_maps_shape, actions_shape, i, is_for_rl)
+                                             feature_maps_shape, actions_shape, i, is_for_rl, is_pg_rl)
                        for j in range(len(file_names))]
             _ = ray.get(futures)
             ray.shutdown()
