@@ -6,7 +6,7 @@ import time
 
 import ray
 
-from lux_ai import scraper, collector, evaluator, imitator, trainer, tools
+from lux_ai import scraper, collector, evaluator, imitator, trainer_ac, trainer_pg, tools
 from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 from run_configuration import CONF_Scrape, CONF_Collect, CONF_RL, CONF_Main, CONF_Imitate, CONF_Evaluate
 
@@ -176,13 +176,15 @@ def rl_train(input_data):  # , checkpoint):
     #                                num_tables=1, min_size=config["batch_size"], max_size=config["buffer_size"],
     #                                n_points=config["n_points"], checkpointer=checkpointer)
     if config["rl_type"] == "single":
-        trainer.ac_agent_run(config, input_data)
+        trainer_ac.ac_agent_run(config, input_data)
+    elif config["rl_type"] == "single_pg":
+        trainer_pg.pg_agent_run(config, input_data)
     elif config["rl_type"] == "with_evaluation":
         for i in range(10):
             print(f"RL learning, cycle {i}.")
             ray.init(num_gpus=1, include_dashboard=False)
             # remote objects creation
-            trainer_object = ray.remote(num_gpus=1)(trainer.ac_agent_run)
+            trainer_object = ray.remote(num_gpus=1)(trainer_ac.ac_agent_run)
             eval_object = ray.remote(evaluator.Agent)
             # initialization
             workers_info = tools.GlobalVarActor.remote()

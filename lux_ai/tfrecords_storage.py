@@ -418,6 +418,23 @@ def random_reverse(observations, inputs):
     return observations, (act_probs, dir_probs, res_probs, reward)
 
 
+def random_reverse_pg(act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress):
+    probs = [act_probs, dir_probs, res_probs]
+
+    trigger = np.random.choice(np.array([0, 1, 2, 3]))
+    if trigger == 1:
+        observations, probs = up_down(observations, probs)
+    elif trigger == 2:
+        observations, probs = left_right(observations, probs)
+    elif trigger == 3:
+        observations, probs = up_down(observations, probs)
+        observations, probs = left_right(observations, probs)
+
+    act_probs, dir_probs, res_probs = probs
+    new_act_numbers = tf.stack([act_numbers[0], tf.argmax(dir_probs, output_type=tf.int32), act_numbers[2]], axis=0)
+    return new_act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress
+
+
 def split_movement_actions(observation, inputs):
     action_probs_1, action_probs_2, action_probs_3, reward = inputs
     zeros = tf.constant([0, 0, 0, 0], dtype=tf.float32)
@@ -441,6 +458,19 @@ def merge_actions(observation, inputs):
     if tf.reduce_any(tf.math.is_nan(new_probs)):
         new_probs = row_probs
     return observation, (new_probs, reward)
+
+
+def merge_actions_pg(act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress):
+    movements = dir_probs * act_probs[0]
+    idle = act_probs[1:2] + act_probs[2:3]  # transfer + idle
+    bcity = act_probs[3:]
+    row_probs = tf.concat([movements, idle, bcity], axis=0)
+    row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
+    new_probs = tf.nn.softmax(row_logs)  # normalize action probs
+    if tf.reduce_any(tf.math.is_nan(new_probs)):
+        new_probs = row_probs
+    act_number = tf.argmax(new_probs)
+    return act_number, new_probs, observations, reward, progress
 
 
 def merge_actions_amplify(observation, inputs):
@@ -647,4 +677,92 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
         ds = ds.map(merge_actions_rl, num_parallel_calls=AUTO)
     else:
         raise NotImplementedError
+    return ds
+
+
+def read_records_for_rl_pg(feature_maps_shape, actions_shape, model_name, path,
+                           filenames=None, amplify_probs=False):
+    # read from TFRecords. For optimal performance, read from multiple
+    # TFRecord files at once and set the option experimental_deterministic = False
+    # to allow order-altering optimizations.
+
+    def read_tfrecord(example):
+        features = {
+            "action_numbers": tf.io.FixedLenFeature([], tf.string),
+            "action_probs_1": tf.io.FixedLenFeature([], tf.string),
+            "action_probs_2": tf.io.FixedLenFeature([], tf.string),
+            "action_probs_3": tf.io.FixedLenFeature([], tf.string),
+            "observation": tf.io.FixedLenFeature([], tf.string),
+            "reward": tf.io.FixedLenFeature([], tf.float32),
+            "progress_value": tf.io.FixedLenFeature([], tf.float32),
+        }
+        # decode the TFRecord
+        example = tf.io.parse_single_example(example, features)
+
+        action_numbers = tf.io.parse_tensor(example["action_numbers"], tf.int16)
+        action_numbers = tf.cast(action_numbers, dtype=tf.int32)
+        action_numbers.set_shape(len(actions_shape))
+
+        action_probs_1 = tf.io.parse_tensor(example["action_probs_1"], tf.float16)
+        action_probs_1 = tf.cast(action_probs_1, dtype=tf.float32)
+        action_probs_1.set_shape(actions_shape[0][0])
+        action_probs_2 = tf.io.parse_tensor(example["action_probs_2"], tf.float16)
+        action_probs_2 = tf.cast(action_probs_2, dtype=tf.float32)
+        action_probs_2.set_shape(actions_shape[1][0])
+        action_probs_3 = tf.io.parse_tensor(example["action_probs_3"], tf.float16)
+        action_probs_3 = tf.cast(action_probs_3, dtype=tf.float32)
+        action_probs_3.set_shape(actions_shape[2][0])
+
+        observation = tf.io.parse_tensor(example["observation"], tf.string)
+        observation = tf.expand_dims(observation, axis=0)
+        observation = tf.io.deserialize_many_sparse(observation, dtype=tf.float16)
+        observation = tf.sparse.to_dense(observation)
+        observation = tf.squeeze(observation)
+        observation = tf.cast(observation, dtype=tf.float32)
+        observation.set_shape(feature_maps_shape)
+
+        reward = example["reward"]
+        reward.set_shape(())
+        reward = tf.cast(reward, dtype=tf.float32)
+
+        progress_value = example["progress_value"]
+        progress_value.set_shape(())
+        progress_value = tf.cast(progress_value, dtype=tf.float32)
+
+        return action_numbers, action_probs_1, action_probs_2, action_probs_3, observation, reward, progress_value
+
+    option_no_order = tf.data.Options()
+    option_no_order.experimental_deterministic = False
+
+    if filenames is None:
+        filenames = tf.io.gfile.glob(path + "*.tfrec")
+
+    # test_dataset = tf.data.Dataset.list_files(filenames)
+    # test_dataset = test_dataset.interleave(lambda x: tf.data.TFRecordDataset(x),
+    #                                        cycle_length=5,
+    #                                        num_parallel_calls=AUTO,
+    #                                        )
+    # count = 0
+    # for item in test_dataset:
+    #     foo = read_tfrecord(item)
+    #     foo = random_reverse_pg(*foo)
+    #     foo = merge_actions_pg(*foo)
+    #     count += 1
+
+    # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
+    filenames_ds = tf.data.Dataset.list_files(filenames)
+    # filenames_ds = filenames_ds.with_options(option_no_order)
+    ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
+                                 cycle_length=5,
+                                 num_parallel_calls=AUTO
+                                 )
+    ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
+    if model_name == "actor_critic_residual_shrub":
+        raise NotImplementedError
+    elif model_name == "actor_critic_residual_six_actions":
+        ds = ds.map(merge_actions_pg, num_parallel_calls=AUTO)
+    else:
+        raise NotImplementedError
+    ds = ds.shuffle(10000)
     return ds
