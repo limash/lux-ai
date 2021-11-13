@@ -152,6 +152,10 @@ def pg_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=None
                 t2 = time.time()
                 if step_counter % 100 == 0:
                     print(f"Training. Step: {step_counter} Time: {t2 - t1:.2f}.")
+                    if self._global_var_actor is not None:
+                        is_done = ray.get(self._global_var_actor.get_done.remote())
+                        if is_done:
+                            break
 
             weights = self._model.get_weights()
             data = {
