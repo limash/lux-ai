@@ -81,7 +81,7 @@ def collect(input_data):
     # collector.hundred_sep_collect(config, input_data, data_path, 9)
 
     ray.init(include_dashboard=False)
-    collector_object = ray.remote(collector.hundred_sep_collect)
+    collector_object = ray.remote(collector.collect)
     futures = [collector_object.remote(config, input_data, data_path, j) for j in range(2)]
     _ = ray.get(futures)
     ray.shutdown()
@@ -124,7 +124,7 @@ def imitate(input_data):
             # remote objects creation
             trainer_object = ray.remote(num_gpus=1)(imitator.Agent)
             eval_object = ray.remote(evaluator.Agent)
-            collector_object = ray.remote(collector.hundred_sep_collect)
+            collector_object = ray.remote(collector.collect)
             # initialization
             workers_info = tools.GlobalVarActor.remote()
             imitator_agent = trainer_object.remote(config, input_data, workers_info, filenames, i)

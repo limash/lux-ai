@@ -274,7 +274,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 if unit_type != "u":
                     continue
                 actions = unit.actions
-                movements_average = actions[0] / 4
+                movements_average = actions[0] / 4 if actions[0] > 0 else 1.
                 idle_prob = movements_average / actions[2] if actions[2] > 0 else 1.
                 build_multiplier = movements_average / actions[3] if actions[3] > 0 else 1.
                 counters = np.zeros_like(actions)  # for debug, shows points with actions yielded

@@ -85,21 +85,7 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
                 behaviour_action_log_probs_v = behaviour_action_log_probs.numpy()
 
             with tf.GradientTape() as tape:
-                maps = observations
-                maps_shape = tf.shape(maps)
-                # scalars_shape = tf.shape(scalars)
-                maps_merged = tf.reshape(maps, (-1, maps_shape[2], maps_shape[3], maps_shape[4]))
-                # maps_merged = tf.reshape(maps, (-1, maps_shape[2], maps_shape[3]))
-                # scalars_merged = tf.reshape(scalars, (-1, scalars_shape[2]))
-                probs_merged, values_merged = self._model(maps_merged, training=True)
-                probs = tf.reshape(probs_merged, (maps_shape[0], maps_shape[1], -1))
-                # values = tf.reshape(values_merged, (maps_shape[0], maps_shape[1], -1))
-                # -
-
-                # logits = tf.roll(logits, shift=1, axis=0)  # shift by 1 along time dimension, to match a pattern
-                # values = tf.roll(values, shift=1, axis=0)  # where actions, logits, etc. led to the observation
-                # probs = tf.roll(probs, shift=1, axis=1)  # shift by 1 along time dimension, to match a pattern
-                # values = tf.roll(values, shift=1, axis=1)  # where actions, logits, etc. led to the observation
+                probs, values = self._model(observations, training=True)
                 target_action_log_probs = tools.get_prob_logs_from_probs(probs, actions, self._model_actions_shape)
                 if self._is_debug:
                     probs_v = probs.numpy()
@@ -108,69 +94,36 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
                 with tape.stop_recording():
                     log_rhos = target_action_log_probs - behaviour_action_log_probs
                     rhos = tf.exp(log_rhos)
-                    # rhos_masked = tf.where(actions == -1, 0., rhos)  # use where to remove nans
-                    rhos_masked = rhos * mask2d
-                    clipped_rhos = tf.minimum(tf.constant(1.), rhos_masked)
+                    clipped_rhos = tf.minimum(tf.constant(1.), rhos)
 
-                # add final rewards to 'empty' spots in values
-                # values = tf.squeeze(values) * mask2d  # to ensure zeros in not valid spots
-                # values = tf.where(e_mask == 0, total_rewards, values)  # to calculate targets
-                # values = tf.where(mask2d == 0, total_rewards, tf.squeeze(values))  # to calculate targets
                 if self._is_debug:
                     clipped_rhos_v = clipped_rhos.numpy()
-                    # values_v = values.numpy()
 
+                targets = total_rewards
                 with tape.stop_recording():
-                    # calculate targets
-                    # targets = tools.prepare_td_lambda(tf.squeeze(values), returns, None, self._lambda, 1.)
-                    # targets = tools.tf_prepare_td_lambda_no_rewards(values, total_rewards[:, 0], self._lambda, 1.)
-                    # targets = targets * mask2d
-                    targets = total_rewards * mask2d
+                    td_error = clipped_rhos * targets
 
-                # values = values * mask2d
                 if self._is_debug:
-                    # values_v = values.numpy()
-                    targets_v = targets.numpy()
-
-                with tape.stop_recording():
-                    # td error with truncated IS weights (rhos), it is a constant:
-                    # modified_rhos = tf.math.divide_no_nan(1., clipped_rhos)
-                    # modified_rhos = tf.minimum(tf.constant(2.), modified_rhos)
-                    # td_error = modified_rhos * targets
-                    # td_error = modified_rhos * (targets - values)
-                    # td_error = clipped_rhos * (targets - values)
-                    td_error = clipped_rhos * targets * loss_weights
-
-                # critic loss
-                # critic_loss = self._loss_fn(targets, values)
-                # critic_loss = .5 * tf.reduce_sum(tf.square(targets - values))
+                    td_error_v = td_error.numpy()
 
                 # actor loss
-                # use tf.where to get rid of -infinities, but probably it causes inability to calculate grads
-                # check https://stackoverflow.com/questions/33712178/tensorflow-nan-bug/42497444#42497444
-                # target_action_log_probs = tf.where(actions == -1, 0., target_action_log_probs)
-                target_action_log_probs = target_action_log_probs * mask2d
                 actor_loss = -1 * target_action_log_probs * td_error
-                # actor_loss = tf.reduce_mean(actor_loss)
                 actor_loss = tf.reduce_sum(actor_loss)
 
                 # entropy loss
-                entropy = tools.get_entropy_from_probs(probs, mask3d)
-                # entropy_loss = -1 * self._entropy_c * tf.reduce_sum(entropy)
+                entropy = tools.get_entropy_from_probs(probs)
+                entropy_loss = -1 * self._entropy_c * tf.reduce_sum(entropy)
                 # entropy_loss = -1 * self._entropy_c * tf.reduce_mean(entropy)
-                foo = 1 - progress * (1 - self._entropy_c_decay)
+                # foo = 1 - progress * (1 - self._entropy_c_decay)
                 if self._is_debug:
                     entropy_v = entropy.numpy()
-                    foo_v = foo.numpy()
-                entropy_loss = -self._entropy_c * tf.reduce_sum(entropy * foo)
+                    # foo_v = foo.numpy()
+                # entropy_loss = -self._entropy_c * tf.reduce_sum(entropy * foo)
 
-                loss = actor_loss + entropy_loss  # + critic_loss
+                loss = actor_loss + entropy_loss
             grads = tape.gradient(loss, self._model.trainable_variables)
             # grads = [tf.clip_by_norm(g, 4.0) for g in grads]
             self._optimizer.apply_gradients(zip(grads, self._model.trainable_variables))
-
-            data_count = tf.reduce_sum(mask2d)
-            return data_count
 
         def do_train(self):
             if self._current_cycle is not None:

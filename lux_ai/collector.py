@@ -1,4 +1,5 @@
-def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_out, global_var_actor_out=None):
+def collect(config_out, input_data_out, data_path_out, collector_n_out, global_var_actor_out=None,
+            steps=10):
     import abc
     import time
     from multiprocessing import Process
@@ -134,7 +135,7 @@ def hundred_sep_collect(config_out, input_data_out, data_path_out, collector_n_o
 
     # collect_and_store(0, config_out, input_data_out, data_path_out, collector_n_out)
 
-    for i in range(100):
+    for i in range(steps):
         p = Process(target=collect_and_store, args=(i, config_out, input_data_out, data_path_out, collector_n_out))
         p.start()
         p.join()
