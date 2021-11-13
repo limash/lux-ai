@@ -33,11 +33,11 @@ CONF_Imitate = {
 }
 
 CONF_RL = {
-    "rl_type": "single_pg",
+    "rl_type": "continuous_pg",
     # "lambda": 0.8,
-    "debug": True,
+    "debug": False,
     "default_lr": 1e-5,
-    "batch_size": 100,
+    "batch_size": 500,
     # "iterations_number": 1000,
     # "save_interval": 100,
     "entropy_c": 2.e-3,

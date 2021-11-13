@@ -1,4 +1,4 @@
-def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=None):
+def pg_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=None, current_cycle_in=None):
     import abc
     import time
     import pickle
@@ -19,7 +19,7 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
     class Agent(abc.ABC):
-        def __init__(self, config, data, current_cycle=None, global_var_actor=None):
+        def __init__(self, config, data, global_var_actor=None, filenames=None, current_cycle=None):
 
             self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])
             self._actions_shape = [item.shape for item in empty_worker_action_vectors]
@@ -67,7 +67,8 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
                 self._training_step = tf.function(self._training_step)
 
             self._current_cycle = current_cycle
-            self._global_var_actor = global_var_actor if global_var_actor else None
+            self._global_var_actor = global_var_actor
+            self._filenames = filenames
 
         def _training_step(self, actions, behaviour_policy_probs, observations, total_rewards,  progress):
             print("Tracing")
@@ -133,27 +134,17 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
 
             ds_learn = tfrecords_storage.read_records_for_rl_pg(
                 self._feature_maps_shape, self._actions_shape, self._model_name,
-                "data/tfrecords/rl/storage_0/"
-            )
-            ds_storage = tfrecords_storage.read_records_for_rl_pg(
-                self._feature_maps_shape, self._actions_shape, self._model_name,
-                "data/tfrecords/rl/storage/"
+                "_",
+                filenames=self._filenames
             )
             ds_learn = ds_learn.batch(self._batch_size).prefetch(1)
-            ds_storage = ds_storage.batch(self._batch_size).prefetch(1)
-
-            storage_iterator = iter(ds_storage)
             learn_iterator = iter(ds_learn)
-            # for step_counter in range(1, self._iterations_number + 1):
+
             for step_counter in itertools.count(1):
-                # sampling
-                if step_counter % 3 == 0:
-                    sample = next(storage_iterator)
-                else:
-                    try:
-                        sample = next(learn_iterator)
-                    except StopIteration:
-                        break
+                try:
+                    sample = next(learn_iterator)
+                except StopIteration:
+                    break
 
                 # training
                 t1 = time.time()
@@ -169,10 +160,7 @@ def pg_agent_run(config_in, data_in, current_cycle_in=None, global_var_actor_in=
             with open(save_path, 'wb') as f:
                 pickle.dump(data, f, protocol=4)
 
-            if self._global_var_actor is not None:
-                ray.get(self._global_var_actor.set_done.remote(True))
-
             print("RL training is done.")
 
-    ac_agent = Agent(config_in, data_in, current_cycle_in, global_var_actor_in)
+    ac_agent = Agent(config_in, data_in, global_var_actor_in, filenames_in, current_cycle_in)
     ac_agent.do_train()
