@@ -40,6 +40,6 @@ CONF_RL = {
     "batch_size": 500,
     # "iterations_number": 1000,
     # "save_interval": 100,
-    "entropy_c": 1.e-2,
+    "entropy_c": 1.e-4,
     "entropy_c_decay": 0.3,
 }

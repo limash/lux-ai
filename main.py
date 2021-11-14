@@ -3,6 +3,8 @@ import glob
 import random
 import pathlib
 import time
+import collections
+import itertools
 
 import ray
 
@@ -250,19 +252,17 @@ def rl_train(input_data):  # , checkpoint):
             prev_n = current_n
             time.sleep(5)
     elif config["rl_type"] == "from_scratch_pg":
-        prev_n = 4
-        prev_prev_n = 3
-        prev_prev_prev_n = 2
-        for i in range(10):
+        amount_of_pieces = 20
+        previous_pieces = collections.deque([i + 2 for i in range(amount_of_pieces - 2)])
+        for i in range(100):
             print(f"PG learning, cycle {i}.")
-            current_n = i % 5  # current and prev to use
-            next_n = (i + 1) % 5  # next to collect
+            current_n = i % amount_of_pieces  # current and prev to use
+            next_n = (i + 1) % amount_of_pieces  # next to collect
             data_path = f"data/tfrecords/rl/storage_{next_n}/"  # path to save in
             fnames_curr = glob.glob(f"data/tfrecords/rl/storage_{current_n}/*.tfrec")
-            fnames_prev = glob.glob(f"data/tfrecords/rl/storage_{prev_n}/*.tfrec")
-            fnames_prev_prev = glob.glob(f"data/tfrecords/rl/storage_{prev_prev_n}/*.tfrec")
-            fnames_prev_prev_prev = glob.glob(f"data/tfrecords/rl/storage_{prev_prev_prev_n}/*.tfrec")
-            filenames = fnames_prev + fnames_prev_prev + fnames_prev_prev_prev + fnames_curr
+            fnames_prev_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in previous_pieces]
+            fnames_prev_list = list(itertools.chain.from_iterable(fnames_prev_list))
+            filenames = fnames_prev_list + fnames_curr
 
             files = glob.glob("./data/weights/*.pickle")
             if len(files) > 0:
@@ -290,9 +290,8 @@ def rl_train(input_data):  # , checkpoint):
             time.sleep(1)
             ray.shutdown()
 
-            prev_prev_prev_n = prev_prev_n
-            prev_prev_n = prev_n
-            prev_n = current_n
+            previous_pieces.rotate(-1)
+            previous_pieces[-1] = current_n
             time.sleep(5)
     else:
         raise NotImplementedError

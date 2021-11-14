@@ -783,14 +783,14 @@ def read_records_for_rl_pg(feature_maps_shape, actions_shape, model_name, path,
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
     filenames_ds = tf.data.Dataset.list_files(filenames)
-    filenames_ds = filenames_ds.repeat(10)
+    # filenames_ds = filenames_ds.repeat(10)
     # filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
                                  cycle_length=5,
                                  num_parallel_calls=AUTO
                                  )
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
+    # ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
         raise NotImplementedError
     elif model_name == "actor_critic_residual_six_actions":
