@@ -37,7 +37,7 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
             self._n_points = config["n_points"]
             self._model_name = config["model_name"]
             if data is None:
-                raise ValueError("No weights data.")
+                print("Collecting from a random agent.")
             self._agent = agents.get_processing_agent(self._model_name, data)
 
             self._feature_maps_shape = tools.get_feature_maps_shape(config["environment"])

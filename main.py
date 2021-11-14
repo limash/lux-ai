@@ -78,7 +78,7 @@ def collect(input_data):
     else:
         raise NotImplementedError
 
-    # collector.hundred_sep_collect(config, input_data, data_path, 9)
+    # collector.collect(config, input_data, data_path, 9)
 
     ray.init(include_dashboard=False)
     collector_object = ray.remote(collector.collect)
@@ -241,6 +241,51 @@ def rl_train(input_data):  # , checkpoint):
             # getting results from remote functions
             _ = ray.get(trainer_future)
             _ = ray.get(eval_future)
+            _ = ray.get(col_futures)
+            time.sleep(1)
+            ray.shutdown()
+
+            prev_prev_prev_n = prev_prev_n
+            prev_prev_n = prev_n
+            prev_n = current_n
+            time.sleep(5)
+    elif config["rl_type"] == "from_scratch_pg":
+        prev_n = 4
+        prev_prev_n = 3
+        prev_prev_prev_n = 2
+        for i in range(10):
+            print(f"PG learning, cycle {i}.")
+            current_n = i % 5  # current and prev to use
+            next_n = (i + 1) % 5  # next to collect
+            data_path = f"data/tfrecords/rl/storage_{next_n}/"  # path to save in
+            fnames_curr = glob.glob(f"data/tfrecords/rl/storage_{current_n}/*.tfrec")
+            fnames_prev = glob.glob(f"data/tfrecords/rl/storage_{prev_n}/*.tfrec")
+            fnames_prev_prev = glob.glob(f"data/tfrecords/rl/storage_{prev_prev_n}/*.tfrec")
+            fnames_prev_prev_prev = glob.glob(f"data/tfrecords/rl/storage_{prev_prev_prev_n}/*.tfrec")
+            filenames = fnames_prev + fnames_prev_prev + fnames_prev_prev_prev + fnames_curr
+
+            files = glob.glob("./data/weights/*.pickle")
+            if len(files) > 0:
+                with open(files[-1], 'rb') as datafile:
+                    input_data = pickle.load(datafile)
+                    raw_name = pathlib.Path(files[-1]).stem
+                    print(f"Training and collecting from {raw_name}.pickle weights.")
+
+            # trainer_pg.pg_agent_run(config, input_data, None, filenames, 0)
+
+            ray.init(num_gpus=1, include_dashboard=False)
+            # remote objects creation
+            trainer_object = ray.remote(num_gpus=1)(trainer_pg.pg_agent_run)
+            collector_object = ray.remote(collector.collect)
+            # initialization
+            workers_info = tools.GlobalVarActor.remote()
+            # remote call
+            trainer_future = trainer_object.remote(config, input_data, workers_info, filenames, i)
+            col_futures = [
+                collector_object.remote(config, input_data, data_path, j, global_var_actor_out=workers_info)
+                for j in range(2)]
+            # getting results from remote functions
+            _ = ray.get(trainer_future)
             _ = ray.get(col_futures)
             time.sleep(1)
             ray.shutdown()

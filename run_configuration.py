@@ -33,7 +33,7 @@ CONF_Imitate = {
 }
 
 CONF_RL = {
-    "rl_type": "continuous_pg",
+    "rl_type": "from_scratch_pg",
     # "lambda": 0.8,
     "debug": False,
     "default_lr": 1e-5,
