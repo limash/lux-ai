@@ -18,6 +18,8 @@ def pg_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=None
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
+    # tf.debugging.enable_check_numerics()
+
     class Agent(abc.ABC):
         def __init__(self, config, data, global_var_actor=None, filenames=None, current_cycle=None):
 
@@ -50,8 +52,9 @@ def pg_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=None
             elif data is not None:
                 print("Continue the model training from data.pickle.")
             else:
-                raise NotImplementedError
-            self._model.set_weights(data['weights'])
+                print("Using initial weights.")
+            if data:
+                self._model.set_weights(data['weights'])
 
             # self._n_points = config["n_points"]
             # self._iterations_number = config["iterations_number"]
@@ -134,7 +137,7 @@ def pg_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=None
 
             ds_learn = tfrecords_storage.read_records_for_rl_pg(
                 self._feature_maps_shape, self._actions_shape, self._model_name,
-                "_",
+                "data/tfrecords/rl/storage/",
                 filenames=self._filenames
             )
             ds_learn = ds_learn.batch(self._batch_size).prefetch(1)

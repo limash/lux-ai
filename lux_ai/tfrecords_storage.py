@@ -2,6 +2,7 @@ import random
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras import backend
 
 physical_devices = tf.config.list_physical_devices('GPU')
 if len(physical_devices) > 0:
@@ -481,10 +482,9 @@ def merge_actions_pg(act_numbers, act_probs, dir_probs, res_probs, observations,
     idle = act_probs[1:2] + act_probs[2:3]  # transfer + idle
     bcity = act_probs[3:]
     row_probs = tf.concat([movements, idle, bcity], axis=0)
-    row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
+    row_probs = backend.clip(row_probs, backend.epsilon(), 1)
+    row_logs = tf.math.log(row_probs)
     new_probs = tf.nn.softmax(row_logs)  # normalize action probs
-    if tf.reduce_any(tf.math.is_nan(new_probs)):
-        new_probs = row_probs
     if act_numbers[0] == 0:
         if act_numbers[1] == 0:
             act_number = 0
