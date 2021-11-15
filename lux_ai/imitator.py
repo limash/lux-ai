@@ -53,10 +53,7 @@ class Agent(abc.ABC):
         ds_train = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
                                                                self._model_name,
                                                                "data/tfrecords/imitator/train/")
-        # ds_valid = tfrecords_storage.read_records_for_imitator(self._feature_maps_shape, self._actions_shape,
-        #                                                        "data/tfrecords/imitator/validation/")
         ds_train = ds_train.batch(self._batch_size).prefetch(1)  # , drop_remainder=True)
-        # ds_valid = ds_valid.batch(self._batch_size)  # , drop_remainder=True)
 
         # for sample in ds_train.take(10):
         #     observations = sample[0].numpy()
@@ -76,7 +73,7 @@ class Agent(abc.ABC):
 
         if self._model_name == "actor_critic_residual_shrub":
             self._model.compile(
-                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                 loss={
                     "output_1": self._loss_function1,
                     "output_2": self._loss_function2_0,
@@ -90,7 +87,7 @@ class Agent(abc.ABC):
             )
         elif self._model_name == "actor_critic_residual_six_actions":
             self._model.compile(
-                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                 loss={
                     "output_1": self._loss_function,
                     "output_2": None,
@@ -109,7 +106,7 @@ class Agent(abc.ABC):
         #     patience=10,
         #     restore_best_weights=False,
         # )
-        self._model.fit(ds_train, epochs=15,  # validation_data=ds_valid,
+        self._model.fit(ds_train, epochs=10,  # validation_data=ds_valid,
                         verbose=2,
                         callbacks=[save_weights_callback, ]
                         )

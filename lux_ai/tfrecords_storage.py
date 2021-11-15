@@ -165,14 +165,11 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                 for point in unit.data:
                     # point [action, action_probs, observation]
                     action = point[0]
-                    # if action[4] == 1. and random.random() > 0.05:
-                    #     continue
                     # store observation, action_probs, reward
                     observation = tf.sparse.from_dense(tf.constant(point[2], dtype=tf.float16))
                     actions_probs = tuple([tf.constant(item, dtype=tf.float16) for item in point[1]])
                     reward = tf.constant(final_reward, dtype=tf.float16)
                     yield observation, actions_probs, reward
-                    # yield point[2], point[1], final_reward
                     counters += action[0]
 
     episode_length = 360
@@ -338,7 +335,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                         break
 
     # result = []
-    # generator = data_gen_soft_for_pg_no_transfers()
+    # generator = data_gen_all()
     # while len(result) < 10000:
     #     x = next(generator)
     #     result.append(x)
@@ -470,11 +467,19 @@ def merge_actions(observation, inputs):
     idle = act_probs[1:2] + act_probs[2:3]  # transfer + idle
     bcity = act_probs[3:]
     row_probs = tf.concat([movements, idle, bcity], axis=0)
-    row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
+    row_probs = backend.clip(row_probs, backend.epsilon(), 1)
+    row_logs = tf.math.log(row_probs)
     new_probs = tf.nn.softmax(row_logs)  # normalize action probs
     if tf.reduce_any(tf.math.is_nan(new_probs)):
         new_probs = row_probs
     return observation, (new_probs, reward)
+
+
+def filter_transfer(observation, inputs):
+    act_probs, dir_probs, res_probs, reward = inputs
+    general_action = tf.argmax(act_probs)
+    is_valid = tf.math.not_equal(general_action, 1)
+    return is_valid
 
 
 def merge_actions_pg(act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress):
@@ -594,9 +599,9 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
+    #     filter_transfer(*foo)
     #     foo = random_reverse(*foo)
-    #     foo = merge_actions_amplify(*foo)
-    #     # foo = split_movement_actions(*foo)
+    #     foo = merge_actions(*foo)
     #     count += 1
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
@@ -607,6 +612,8 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
                                  num_parallel_calls=AUTO
                                  )
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
+    if model_name == "actor_critic_residual_six_actions":
+        ds = ds.filter(filter_transfer)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
         ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
