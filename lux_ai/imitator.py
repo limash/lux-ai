@@ -23,6 +23,11 @@ class Agent(abc.ABC):
             self._loss_function2_0 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
             self._loss_function2_1 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
             self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
+        elif self._model_name == "actor_critic_residual_with_transfer":
+            self._model = models.actor_critic_residual_with_transfer()
+            self._loss_function1 = tools.LossFunctionSevenActions()
+            self._loss_function2 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
+            self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
         elif self._model_name == "actor_critic_residual_six_actions":
             self._model = models.actor_critic_residual_six_actions(6)
             self._loss_function = tools.LossFunctionSixActions()
@@ -55,21 +60,21 @@ class Agent(abc.ABC):
                                                                "data/tfrecords/imitator/train/")
         ds_train = ds_train.batch(self._batch_size).prefetch(1)  # , drop_remainder=True)
 
-        # for sample in ds_train.take(10):
-        #     observations = sample[0].numpy()
-        #     actions_probs0 = sample[1][0].numpy()
-        #     # actions_probs1 = sample[1][1].numpy()
-        #     # actions_probs2 = sample[1][2].numpy()
-        #     # actions_probs3 = sample[1][3].numpy()
-        #     total_rewards = sample[1][1].numpy()
-        #     # probs_output0, probs_output1, probs_output2, probs_output3, value_output = self._model(observations)
-        #     probs_output, value_output = self._model(observations)
-        #     probs_output_v = probs_output.numpy()
-        #     skewed_loss = self._loss_function(sample[1][0], probs_output)
-        #     skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
-        #     skewed_loss2 = self._loss_function2_0(sample[1][1], probs_output1)
-        #     skewed_loss3 = self._loss_function2_1(sample[1][2], probs_output2)
-        #     skewed_loss4 = self._loss_function3(sample[1][3], probs_output3)
+        for sample in ds_train.take(10):
+            observations = sample[0].numpy()
+            actions_probs0 = sample[1][0].numpy()
+            actions_probs1 = sample[1][1].numpy()
+            actions_probs2 = sample[1][2].numpy()
+            # actions_probs3 = sample[1][3].numpy()
+            total_rewards = sample[1][3].numpy()
+            probs_output0, probs_output1, probs_output2, value_output = self._model(observations)
+            # probs_output, value_output = self._model(observations)
+            # probs_output_v = probs_output.numpy()
+            # skewed_loss = self._loss_function(sample[1][0], probs_output)
+            skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
+            skewed_loss2 = self._loss_function2(sample[1][1], probs_output1)
+            skewed_loss3 = self._loss_function3(sample[1][2], probs_output2)
+            # skewed_loss4 = self._loss_function3(sample[1][3], probs_output3)
 
         if self._model_name == "actor_critic_residual_shrub":
             self._model.compile(
@@ -80,6 +85,19 @@ class Agent(abc.ABC):
                     "output_3": self._loss_function2_1,
                     "output_4": self._loss_function3,
                     "output_5": None  # tf.keras.losses.MeanSquaredError()
+                },
+                metrics={
+                    "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+                },
+            )
+        elif self._model_name == "actor_critic_residual_with_transfer":
+            self._model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                loss={
+                    "output_1": self._loss_function1,
+                    "output_2": self._loss_function2,
+                    "output_3": self._loss_function3,
+                    "output_4": None,
                 },
                 metrics={
                     "output_1": [tf.keras.metrics.CategoricalAccuracy()],

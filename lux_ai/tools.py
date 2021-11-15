@@ -42,6 +42,21 @@ class LossFunctionSixActions(tf.keras.losses.Loss):
         return loss
 
 
+class LossFunctionSevenActions(tf.keras.losses.Loss):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        move_mult = tf.constant(1.)
+        idle_mult = tf.constant(0.1)
+        build_mult = tf.constant(2.)
+        trans_mult = tf.constant(1.)
+        weights = tf.stack([move_mult, move_mult, move_mult, move_mult, idle_mult, build_mult, trans_mult], axis=0)
+        self._class_weights = tf.expand_dims(weights, axis=0)
+
+    def call(self, y_true, y_pred):
+        loss = base_loss(y_true, y_pred, self._class_weights)
+        return loss
+
+
 class LossFunction1(tf.keras.losses.Loss):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

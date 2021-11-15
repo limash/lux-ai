@@ -449,7 +449,7 @@ def random_reverse_pg(act_numbers, act_probs, dir_probs, res_probs, observations
     return new_act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress
 
 
-def split_movement_actions(observation, inputs):
+def split_for_shrub(observation, inputs):
     action_probs_1, action_probs_2, action_probs_3, reward = inputs
     zeros = tf.constant([0, 0, 0, 0], dtype=tf.float32)
     if action_probs_1[0] == 1:  # movement action
@@ -459,6 +459,28 @@ def split_movement_actions(observation, inputs):
         return observation, (action_probs_1, zeros, action_probs_2, action_probs_3, reward)
     else:
         return observation, (action_probs_1, zeros, zeros, action_probs_3, reward)
+
+
+def split_with_transfer(observation, inputs):
+    act_probs, dir_probs, res_probs, reward = inputs
+    movements = dir_probs * act_probs[0]
+    idle = act_probs[2:3]
+    transfer = act_probs[1:2]
+    bcity = act_probs[3:]
+    row_probs = tf.concat([movements, idle, bcity, transfer], axis=0)
+    row_probs = backend.clip(row_probs, backend.epsilon(), 1)
+    row_logs = tf.math.log(row_probs)
+    action_probs = tf.nn.softmax(row_logs)
+
+    if tf.argmax(act_probs) == 1:
+        transfer_dir_probs = dir_probs * act_probs[1]
+        transfer_dir_probs = backend.clip(transfer_dir_probs, backend.epsilon(), 1)
+        transfer_dir_logs = tf.math.log(transfer_dir_probs)
+        transfer_dir_probs = tf.nn.softmax(transfer_dir_logs)
+    else:
+        transfer_dir_probs = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+
+    return observation, (action_probs, transfer_dir_probs, res_probs, reward)
 
 
 def merge_actions(observation, inputs):
@@ -599,9 +621,9 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
-    #     filter_transfer(*foo)
+    #     # filter_transfer(*foo)
     #     foo = random_reverse(*foo)
-    #     foo = merge_actions(*foo)
+    #     foo = split_with_transfer(*foo)
     #     count += 1
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
@@ -616,12 +638,14 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
         ds = ds.filter(filter_transfer)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
-        ds = ds.map(split_movement_actions, num_parallel_calls=AUTO)
+        ds = ds.map(split_for_shrub, num_parallel_calls=AUTO)
     elif model_name == "actor_critic_residual_six_actions":
         if amplify_probs:
             ds = ds.map(merge_actions_amplify, num_parallel_calls=AUTO)
         else:
             ds = ds.map(merge_actions, num_parallel_calls=AUTO)
+    elif model_name == "actor_critic_residual_with_transfer":
+        ds = ds.map(split_with_transfer, num_parallel_calls=AUTO)
     else:
         raise NotImplementedError
     ds = ds.shuffle(10000)
