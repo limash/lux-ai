@@ -381,6 +381,8 @@ class Agent(abc.ABC):
         self._lux_version = config["lux_version"]
         self._team_name = config["team_name"]
         self._only_wins = config["only_wins"]
+        self._only_top_teams = config["only_top_teams"]
+        self._top_teams = {'Toad Brigade', 'RL is all you need', 'ironbar', 'Team Durrett', 'A.Saito'}
 
         self._files = glob.glob("./data/jsons/*.json")
         if self._is_for_rl:
@@ -434,6 +436,11 @@ class Agent(abc.ABC):
                 data = json.load(read_file)
                 if data["version"] != self._lux_version:
                     print(f"File {file_name}; {i}; is for an inappropriate lux version.")
+                    continue
+
+            if self._only_top_teams:
+                team_names = set(data['info']['TeamNames'])
+                if not team_names.issubset(self._top_teams):
                     continue
 
             (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self._scrape(data,

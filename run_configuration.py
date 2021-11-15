@@ -1,6 +1,6 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "imitate",
+    "setup": "scrape",
     "model_name": "actor_critic_residual_with_transfer",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
@@ -13,6 +13,7 @@ CONF_Scrape = {
     "is_pg_rl": False,
     "team_name": "Toad Brigade",
     "only_wins": False,
+    "only_top_teams": True,
 }
 
 CONF_Collect = {
