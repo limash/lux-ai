@@ -43,6 +43,28 @@ def scrape(env_name, data, team_name=None, only_wins=False):
     else:
         team_of_interest = -1
 
+    reward1, reward2 = data["rewards"][0], data["rewards"][1]
+    if reward1 is None:
+        reward1 = -1
+    if reward2 is None:
+        reward2 = -1
+    if reward1 > reward2:
+        final_reward_1 = tf.constant(1, dtype=tf.float16)
+        final_reward_2 = tf.constant(-1, dtype=tf.float16)
+    elif reward1 < reward2:
+        final_reward_2 = tf.constant(1, dtype=tf.float16)
+        final_reward_1 = tf.constant(-1, dtype=tf.float16)
+    else:
+        final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
+
+    if only_wins:
+        if reward1 > reward2:
+            team_of_interest = 1
+        elif reward1 < reward2:
+            team_of_interest = 2
+        else:
+            team_of_interest = -1
+
     player1_data = {}
     player2_data = {}
 
@@ -283,33 +305,11 @@ def scrape(env_name, data, team_name=None, only_wins=False):
     #     count_team_2 += len(value.data)
     # print(f"Team 1 count: {count_team_1}; Team 2 count: {count_team_2}; Team to add: {team_of_interest}")
 
-    reward1, reward2 = data["rewards"][0], data["rewards"][1]
-    if reward1 is None:
-        reward1 = -1
-    if reward2 is None:
-        reward2 = -1
-    if reward1 > reward2:
-        final_reward_1 = tf.constant(1, dtype=tf.float16)
-        final_reward_2 = tf.constant(-1, dtype=tf.float16)
-    elif reward1 < reward2:
-        final_reward_2 = tf.constant(1, dtype=tf.float16)
-        final_reward_1 = tf.constant(-1, dtype=tf.float16)
-    else:
-        final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
-
     progress = tf.linspace(0., 1., step + 2)[:-1]
     progress = tf.cast(progress, dtype=tf.float16)
 
     if team_of_interest == -1:
-        if only_wins:
-            if reward1 > reward2:
-                output = (player1_data, None), (final_reward_1, None), progress
-            elif reward1 < reward2:
-                output = (None, player2_data), (None, final_reward_2), progress
-            else:
-                output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
-        else:
-            output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+        output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
     elif team_of_interest == 1:
         output = (player1_data, None), (final_reward_1, None), progress
     elif team_of_interest == 2:
@@ -336,6 +336,20 @@ def scrape_file(env_name, file_name, team_name, lux_version, only_wins,
         return
     else:
         print(f"File {file_name}; {record_number}; recording.")
+
+    if team_name is None:
+        team_names = data['info']['TeamNames']
+        reward1, reward2 = data['rewards']
+        if reward1 is None:
+            reward1 = -1
+        if reward2 is None:
+            reward2 = -1
+        if reward1 > reward2:
+            team_name = team_names[0]
+        elif reward1 < reward2:
+            team_name = team_names[1]
+        else:
+            team_name = 'Draw'
 
     tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                              feature_maps_shape, acts_shape, record_number,
@@ -452,9 +466,25 @@ class Agent(abc.ABC):
             else:
                 print(f"File {file_name}; {i}; recording.")
 
+            if self._team_name:
+                team_name = self._team_name
+            else:
+                team_names = data['info']['TeamNames']
+                reward1, reward2 = data['rewards']
+                if reward1 is None:
+                    reward1 = -1
+                if reward2 is None:
+                    reward2 = -1
+                if reward1 > reward2:
+                    team_name = team_names[0]
+                elif reward1 < reward2:
+                    team_name = team_names[1]
+                else:
+                    team_name = 'Draw'
+
             tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
                                      self._feature_maps_shape, self._actions_shape, i,
-                                     raw_name + "_" + self._team_name, progress,
+                                     raw_name + "_" + team_name, progress,
                                      self._is_for_rl,
                                      is_pg_rl=self._is_pg_rl)
             j += 1
