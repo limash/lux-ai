@@ -396,23 +396,20 @@ def do_nothing(obs, probs):
 
 def random_reverse(observations, inputs):
     act_probs, dir_probs, res_probs, reward = inputs
-    probs = [act_probs, dir_probs, res_probs]
+    trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
 
-    # trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
-    trigger = np.random.choice(np.array([0, 1, 2, 3]))
-
-    # observations, probs = tf.cond(tf.equal(trigger, tf.constant(1, dtype=tf.int32)),
-    #                               lambda: up_down(observations, probs),
-    #                               lambda: do_nothing(observations, probs))
-    if trigger == 1:
-        observations, probs = up_down(observations, probs)
-    elif trigger == 2:
-        observations, probs = left_right(observations, probs)
+    if trigger == 1:  # up down
+        observations = tf.reverse(observations, [0])
+        dir_probs = tf.stack([dir_probs[2], dir_probs[1], dir_probs[0], dir_probs[3]], axis=0)
+    elif trigger == 2:  # left right
+        observations = tf.reverse(observations, [1])
+        dir_probs = tf.stack([dir_probs[0], dir_probs[3], dir_probs[2], dir_probs[1]], axis=0)
     elif trigger == 3:
-        observations, probs = up_down(observations, probs)
-        observations, probs = left_right(observations, probs)
+        observations = tf.reverse(observations, [0])
+        dir_probs = tf.stack([dir_probs[2], dir_probs[1], dir_probs[0], dir_probs[3]], axis=0)
+        observations = tf.reverse(observations, [1])
+        dir_probs = tf.stack([dir_probs[0], dir_probs[3], dir_probs[2], dir_probs[1]], axis=0)
 
-    act_probs, dir_probs, res_probs = probs
     return observations, (act_probs, dir_probs, res_probs, reward)
 
 
@@ -627,7 +624,9 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     #     count += 1
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    filenames_ds = tf.data.Dataset.list_files(filenames)
+    # filenames_ds = tf.data.Dataset.list_files(filenames)
+    filenames_ds = tf.data.Dataset.from_tensor_slices(filenames)
+    filenames_ds = filenames_ds.shuffle(len(filenames), reshuffle_each_iteration=True)
     # filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
                                  cycle_length=5,
@@ -648,7 +647,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
         ds = ds.map(split_with_transfer, num_parallel_calls=AUTO)
     else:
         raise NotImplementedError
-    ds = ds.shuffle(10000)
+    ds = ds.shuffle(10000, reshuffle_each_iteration=True)
     return ds
 
 
