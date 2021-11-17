@@ -24,13 +24,13 @@ CONF_Collect = {
 }
 
 CONF_Evaluate = {
-    "eval_compare_agent": "compare_agent",
+    "eval_compare_agent": "compare_agent_eff",
 }
 
 CONF_Imitate = {
     "batch_size": 500,
     "self_imitation": False,
-    "with_evaluation": False,
+    "with_evaluation": True,
 }
 
 CONF_RL = {
