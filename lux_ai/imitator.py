@@ -31,6 +31,9 @@ class Agent(abc.ABC):
         elif self._model_name == "actor_critic_residual_six_actions":
             self._model = models.actor_critic_residual_six_actions(6)
             self._loss_function = tools.LossFunctionSixActions()
+        elif self._model_name == "actor_critic_efficient_six_actions":
+            self._model = models.actor_critic_efficient_six_actions(6)
+            self._loss_function = tools.LossFunctionSixActions()
         else:
             raise NotImplementedError
 
@@ -108,6 +111,17 @@ class Agent(abc.ABC):
                 },
             )
         elif self._model_name == "actor_critic_residual_six_actions":
+            self._model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                loss={
+                    "output_1": self._loss_function,
+                    "output_2": None,
+                },
+                metrics={
+                    "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+                },
+            )
+        elif self._model_name == "actor_critic_efficient_six_actions":
             self._model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                 loss={
