@@ -156,9 +156,9 @@ v2_base_block = [  # The baseline config for v2 models.
 #     'r15_k3_s2_e6_i160_o256_se0.25',
 # ]
 v2_s_block = [  # about base * (width1.4, depth1.8)  # SY: adapt to lux
-    'r1_k3_s1_e1_i128_o128_c1',
-    'r2_k3_s1_e2_i128_o128_c1',
-    'r9_k3_s1_e2_i128_o128_se0.25',
+    'r1_k3_s1_e1_i200_o200_c1',
+    'r2_k3_s1_e2_i200_o200_c1',
+    'r9_k3_s1_e2_i200_o200_se0.25',
 ]
 
 

@@ -635,10 +635,10 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_six_actions":
         ds = ds.filter(filter_transfer)
-    ds = ds.map(random_reverse, num_parallel_calls=AUTO)
+    # ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
         ds = ds.map(split_for_shrub, num_parallel_calls=AUTO)
-    elif model_name == "actor_critic_residual_six_actions":
+    elif model_name == "actor_critic_residual_six_actions" or "actor_critic_efficient_six_actions":
         if amplify_probs:
             ds = ds.map(merge_actions_amplify, num_parallel_calls=AUTO)
         else:

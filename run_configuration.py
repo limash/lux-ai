@@ -28,9 +28,9 @@ CONF_Evaluate = {
 }
 
 CONF_Imitate = {
-    "batch_size": 500,
+    "batch_size": 100,
     "self_imitation": False,
-    "with_evaluation": False,
+    "with_evaluation": True,
 }
 
 CONF_RL = {
