@@ -1,7 +1,7 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
     "setup": "imitate",
-    "model_name": "actor_critic_efficient_six_actions",
+    "model_name": "actor_critic_residual_with_transfer",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
 
@@ -28,7 +28,7 @@ CONF_Evaluate = {
 }
 
 CONF_Imitate = {
-    "batch_size": 100,
+    "batch_size": 500,
     "self_imitation": False,
     "with_evaluation": True,
 }
