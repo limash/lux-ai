@@ -414,25 +414,28 @@ def random_reverse(observations, inputs):
 
 
 def random_reverse_pg(act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress):
-    probs = [act_probs, dir_probs, res_probs]
+    trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
 
     new_act_numbers = act_numbers
-    trigger = np.random.choice(np.array([0, 1, 2, 3]))
-    if trigger == 1:
-        observations, probs = up_down(observations, probs)
+    if trigger == 1:  # up down
+        observations = tf.reverse(observations, [0])
+        dir_probs = tf.stack([dir_probs[2], dir_probs[1], dir_probs[0], dir_probs[3]], axis=0)
         if act_numbers[1] == 0:
             new_act_numbers = tf.stack([act_numbers[0], tf.constant(2, dtype=tf.int32), act_numbers[2]], axis=0)
         elif act_numbers[1] == 2:
             new_act_numbers = tf.stack([act_numbers[0], tf.constant(0, dtype=tf.int32), act_numbers[2]], axis=0)
-    elif trigger == 2:
-        observations, probs = left_right(observations, probs)
+    elif trigger == 2:  # left right
+        observations = tf.reverse(observations, [1])
+        dir_probs = tf.stack([dir_probs[0], dir_probs[3], dir_probs[2], dir_probs[1]], axis=0)
         if act_numbers[1] == 1:
             new_act_numbers = tf.stack([act_numbers[0], tf.constant(3, dtype=tf.int32), act_numbers[2]], axis=0)
         elif act_numbers[1] == 3:
             new_act_numbers = tf.stack([act_numbers[0], tf.constant(1, dtype=tf.int32), act_numbers[2]], axis=0)
     elif trigger == 3:
-        observations, probs = up_down(observations, probs)
-        observations, probs = left_right(observations, probs)
+        observations = tf.reverse(observations, [0])
+        dir_probs = tf.stack([dir_probs[2], dir_probs[1], dir_probs[0], dir_probs[3]], axis=0)
+        observations = tf.reverse(observations, [1])
+        dir_probs = tf.stack([dir_probs[0], dir_probs[3], dir_probs[2], dir_probs[1]], axis=0)
         if act_numbers[1] == 0:
             new_act_numbers = tf.stack([act_numbers[0], tf.constant(2, dtype=tf.int32), act_numbers[2]], axis=0)
         elif act_numbers[1] == 2:
@@ -442,7 +445,6 @@ def random_reverse_pg(act_numbers, act_probs, dir_probs, res_probs, observations
         elif act_numbers[1] == 3:
             new_act_numbers = tf.stack([act_numbers[0], tf.constant(1, dtype=tf.int32), act_numbers[2]], axis=0)
 
-    act_probs, dir_probs, res_probs = probs
     return new_act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress
 
 
@@ -813,7 +815,9 @@ def read_records_for_rl_pg(feature_maps_shape, actions_shape, model_name, path,
     #     count += 1
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
-    filenames_ds = tf.data.Dataset.list_files(filenames)
+    # filenames_ds = tf.data.Dataset.list_files(filenames)
+    filenames_ds = tf.data.Dataset.from_tensor_slices(filenames)
+    filenames_ds = filenames_ds.shuffle(len(filenames), reshuffle_each_iteration=True)
     # filenames_ds = filenames_ds.repeat(10)
     # filenames_ds = filenames_ds.with_options(option_no_order)
     ds = filenames_ds.interleave(lambda x: tf.data.TFRecordDataset(x),
@@ -821,10 +825,8 @@ def read_records_for_rl_pg(feature_maps_shape, actions_shape, model_name, path,
                                  num_parallel_calls=AUTO
                                  )
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    # ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
-    if model_name == "actor_critic_residual_shrub":
-        raise NotImplementedError
-    elif model_name == "actor_critic_residual_six_actions":
+    ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
+    if model_name == "actor_critic_residual_six_actions":
         ds = ds.map(merge_actions_pg, num_parallel_calls=AUTO)
     else:
         raise NotImplementedError

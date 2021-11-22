@@ -8,7 +8,7 @@ import itertools
 
 import ray
 
-from lux_ai import scraper, collector, evaluator, imitator, trainer_ac, trainer_pg, tools
+from lux_ai import scraper, collector, evaluator, imitator, trainer_ac, trainer_pg, trainer_ac_mc, tools
 from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 from run_configuration import CONF_Scrape, CONF_Collect, CONF_RL, CONF_Main, CONF_Imitate, CONF_Evaluate
 
@@ -181,6 +181,8 @@ def rl_train(input_data):  # , checkpoint):
         trainer_ac.ac_agent_run(config, input_data)
     elif config["rl_type"] == "single_pg":
         trainer_pg.pg_agent_run(config, input_data)
+    elif config["rl_type"] == "single_ac_mc":
+        trainer_ac_mc.ac_mc_agent_run(config, input_data)
     elif config["rl_type"] == "with_evaluation":
         for i in range(10):
             print(f"RL learning, cycle {i}.")
