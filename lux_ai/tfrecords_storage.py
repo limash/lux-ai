@@ -335,7 +335,7 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
                         break
 
     # result = []
-    # generator = data_gen_all()
+    # generator = data_gen_soft_for_pg_no_transfers()
     # while len(result) < 10000:
     #     x = next(generator)
     #     result.append(x)
