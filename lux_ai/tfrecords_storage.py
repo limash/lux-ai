@@ -826,7 +826,7 @@ def read_records_for_rl_pg(feature_maps_shape, actions_shape, model_name, path,
                                  )
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
     ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
-    if model_name == "actor_critic_residual_six_actions":
+    if model_name == "actor_critic_residual_six_actions" or model_name == "actor_critic_sep_residual_six_actions":
         ds = ds.map(merge_actions_pg, num_parallel_calls=AUTO)
     else:
         raise NotImplementedError

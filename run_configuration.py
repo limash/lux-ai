@@ -1,7 +1,7 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
     "setup": "rl",
-    "model_name": "actor_critic_residual_six_actions",
+    "model_name": "actor_critic_sep_residual_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
 

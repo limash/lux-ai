@@ -99,6 +99,134 @@ def actor_critic_residual_six_actions(actions_shape):
     return model
 
 
+def actor_critic_sep_residual_six_actions(actions_shape):
+    import tensorflow as tf
+    import tensorflow.keras as keras
+
+    class ResidualUnit(keras.layers.Layer):
+        def __init__(self, filters, initializer, activation, **kwargs):
+            super().__init__(**kwargs)
+
+            self._filters = filters
+            self._activation = activation
+            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer, padding="same", use_bias=False)
+            self._norm = keras.layers.BatchNormalization()
+
+        def call(self, inputs, training=False, **kwargs):
+            x = self._conv(inputs)
+            x = self._norm(x, training=training)
+            return self._activation(inputs + x)
+
+        def compute_output_shape(self, batch_input_shape):
+            batch, x, y, _ = batch_input_shape
+            return [batch, x, y, self._filters]
+
+    class CriticBranch(keras.layers.Layer):
+        def __init__(self, filters, initializer, activation, layers, **kwargs):
+            super().__init__(**kwargs)
+
+            self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
+            self._depthwise = keras.layers.DepthwiseConv2D(13)
+            self._flatten = keras.layers.Flatten()
+            self._fc_128 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+
+        def call(self, inputs, training=False, **kwargs):
+            x, center = inputs
+
+            for layer in self._residual_block:
+                x = layer(x, training=training)
+
+            shape_x = tf.shape(x)
+            y = tf.reshape(x, (shape_x[0], -1, shape_x[-1]))
+            y = tf.reduce_mean(y, axis=1)
+
+            z1 = (x * center)
+            shape_z = tf.shape(z1)
+            z1 = tf.reshape(z1, (shape_z[0], -1, shape_z[-1]))
+            z1 = tf.reduce_sum(z1, axis=1)
+            z2 = self._depthwise(x)
+            z2 = self._flatten(z2)
+            z = tf.concat([y, z1, z2], axis=1)
+            z = self._fc_128(z)
+
+            return z
+
+    class ActorBranch(keras.layers.Layer):
+        def __init__(self, filters, initializer, activation, layers, **kwargs):
+            super().__init__(**kwargs)
+
+            self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
+            self._depthwise = keras.layers.DepthwiseConv2D(13)
+            self._flatten = keras.layers.Flatten()
+            self._fc_128 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+
+        def call(self, inputs, training=False, **kwargs):
+            x, center = inputs
+
+            for layer in self._residual_block:
+                x = layer(x, training=training)
+
+            z1 = (x * center)
+            shape_z = tf.shape(z1)
+            z1 = tf.reshape(z1, (shape_z[0], -1, shape_z[-1]))
+            z1 = tf.reduce_sum(z1, axis=1)
+            z2 = self._depthwise(x)
+            z2 = self._flatten(z2)
+            z = tf.concat([z1, z2], axis=1)
+            z = self._fc_128(z)
+            return z
+
+    class ResidualModel(keras.Model):
+        def __init__(self, actions_number, **kwargs):
+            super().__init__(**kwargs)
+
+            initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
+            initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
+            activation = keras.activations.relu
+
+            self._root = keras.layers.Conv2D(200, 3, padding="same", kernel_initializer=initializer, use_bias=False)
+            self._root_norm = keras.layers.BatchNormalization()
+            self._root_activation = keras.layers.ReLU()
+
+            # actor
+            actor_filters = 200
+            actor_layers = 10
+            self._actor_branch = ActorBranch(actor_filters, initializer, activation, actor_layers)
+            self._action_type = keras.layers.Dense(actions_number, activation="softmax",
+                                                   kernel_initializer=initializer_random)
+            # critic
+            critic_filters = 200
+            critic_layers = 10
+            self._critic_branch = CriticBranch(critic_filters, initializer, activation, critic_layers)
+            self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
+                                                activation=keras.activations.tanh)
+
+        def call(self, inputs, training=False, mask=None):
+            features = inputs
+            x = features
+
+            x = self._root(x)
+            x = self._root_norm(x, training=training)
+            x = self._root_activation(x)
+
+            center = features[:, :, :, :1]
+            z = (x, center)
+
+            w1 = self._actor_branch(z, training=training)
+            action_probs = self._action_type(w1)
+
+            w2 = self._critic_branch(z, training=training)
+            baseline = self._baseline(w2)
+
+            return action_probs, baseline
+
+        def get_config(self):
+            pass
+
+    model = ResidualModel(actions_shape)
+    return model
+
+
 def actor_critic_residual_with_transfer():
     import tensorflow as tf
     import tensorflow.keras as keras

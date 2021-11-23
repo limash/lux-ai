@@ -30,6 +30,9 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
             if self._model_name == "actor_critic_residual_six_actions":
                 self._model = models.actor_critic_residual_six_actions(6)
                 self._model_actions_shape = 6
+            elif self._model_name == "actor_critic_sep_residual_six_actions":
+                self._model = models.actor_critic_sep_residual_six_actions(6)
+                self._model_actions_shape = 6
             else:
                 raise NotImplementedError
 
