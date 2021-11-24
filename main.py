@@ -295,6 +295,53 @@ def rl_train(input_data):  # , checkpoint):
             previous_pieces.rotate(-1)
             previous_pieces[-1] = current_n
             time.sleep(5)
+    elif config["rl_type"] == "continuous_ac_mc":
+        amount_of_pieces = 20
+        previous_pieces = collections.deque([i + 2 for i in range(amount_of_pieces - 2)])
+        for i in range(100):
+            print(f"PG learning, cycle {i}.")
+            current_n = i % amount_of_pieces  # current and prev to use
+            next_n = (i + 1) % amount_of_pieces  # next to collect
+            data_path = f"data/tfrecords/rl/storage_{next_n}/"  # path to save in
+            fnames_fixed = glob.glob("data/tfrecords/rl/storage/*.tfrec")
+            fnames_curr = glob.glob(f"data/tfrecords/rl/storage_{current_n}/*.tfrec")
+            fnames_prev_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in previous_pieces]
+            fnames_prev_list = list(itertools.chain.from_iterable(fnames_prev_list))
+            filenames = fnames_fixed + fnames_prev_list + fnames_curr
+
+            files = glob.glob("./data/weights/*.pickle")
+            if len(files) > 0:
+                with open(files[-1], 'rb') as datafile:
+                    input_data = pickle.load(datafile)
+                    raw_name = pathlib.Path(files[-1]).stem
+                    print(f"Training and collecting from {raw_name}.pickle weights.")
+
+            # trainer_pg.pg_agent_run(config, input_data, None, filenames, 0)
+
+            ray.init(num_gpus=1, include_dashboard=False)
+            # remote objects creation
+            trainer_object = ray.remote(num_gpus=1)(trainer_pg.pg_agent_run)
+            eval_object = ray.remote(evaluator.Agent)
+            collector_object = ray.remote(collector.collect)
+            # initialization
+            workers_info = tools.GlobalVarActor.remote()
+            eval_agent = eval_object.remote(config, input_data, workers_info)
+            # remote call
+            trainer_future = trainer_object.remote(config, input_data, workers_info, filenames, i)
+            eval_future = eval_agent.evaluate.remote()
+            col_futures = [
+                collector_object.remote(config, input_data, data_path, j, global_var_actor_out=workers_info)
+                for j in range(2)]
+            # getting results from remote functions
+            _ = ray.get(trainer_future)
+            _ = ray.get(eval_future)
+            _ = ray.get(col_futures)
+            time.sleep(1)
+            ray.shutdown()
+
+            previous_pieces.rotate(-1)
+            previous_pieces[-1] = current_n
+            time.sleep(5)
     else:
         raise NotImplementedError
 
