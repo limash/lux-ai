@@ -1,7 +1,7 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "scrape",
-    "model_name": "actor_critic_sep_residual_six_actions",
+    "setup": "imitate",
+    "model_name": "actor_critic_efficient_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
 
@@ -24,11 +24,11 @@ CONF_Collect = {
 }
 
 CONF_Evaluate = {
-    "eval_compare_agent": "compare_agent_eff",
+    "eval_compare_agent": "compare_agent_sub13",
 }
 
 CONF_Imitate = {
-    "batch_size": 500,
+    "batch_size": 150,
     "self_imitation": False,
     "with_evaluation": True,
 }

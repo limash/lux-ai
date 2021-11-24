@@ -413,6 +413,26 @@ def random_reverse(observations, inputs):
     return observations, (act_probs, dir_probs, res_probs, reward)
 
 
+def random_rotate(observations, inputs):
+    act_probs, dir_probs, res_probs, reward = inputs
+    trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
+
+    if trigger == 1:
+        observations = tf.image.rot90(observations, k=1)
+        dir_probs = tf.stack([dir_probs[1], dir_probs[2], dir_probs[3], dir_probs[0]], axis=0)
+    elif trigger == 2:
+        observations = tf.image.rot90(observations, k=2)
+        dir_probs = tf.stack([dir_probs[2], dir_probs[3], dir_probs[0], dir_probs[1]], axis=0)
+    elif trigger == 3:
+        observations = tf.image.rot90(observations, k=3)
+        dir_probs = tf.stack([dir_probs[3], dir_probs[0], dir_probs[1], dir_probs[2]], axis=0)
+
+    # observations_v = observations.numpy()
+    # observations1_v = observations1.numpy()
+
+    return observations, (act_probs, dir_probs, res_probs, reward)
+
+
 def random_reverse_pg(act_numbers, act_probs, dir_probs, res_probs, observations, reward, progress):
     trigger = tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32)
 
@@ -623,6 +643,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     #     foo = read_tfrecord(item)
     #     # filter_transfer(*foo)
     #     foo = random_reverse(*foo)
+    #     foo = random_rotate(*foo)
     #     foo = split_with_transfer(*foo)
     #     count += 1
 
@@ -639,6 +660,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     if model_name == "actor_critic_residual_six_actions":
         ds = ds.filter(filter_transfer)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
+    ds = ds.map(random_rotate, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
         ds = ds.map(split_for_shrub, num_parallel_calls=AUTO)
     elif model_name == "actor_critic_residual_six_actions" or model_name == "actor_critic_efficient_six_actions":
