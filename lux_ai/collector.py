@@ -147,8 +147,8 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
         p.start()
         p.join()
 
-    if global_var_actor_out is not None:
-        ray.get(global_var_actor_out.set_done.remote(True))
+    # if global_var_actor_out is not None:
+    #     ray.get(global_var_actor_out.set_done.remote(True))
 
     print("Collecting is done.")
     time.sleep(1)

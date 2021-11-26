@@ -24,7 +24,7 @@ CONF_Collect = {
 }
 
 CONF_Evaluate = {
-    "eval_compare_agent": "compare_agent_sub13",
+    "eval_compare_agent": "compare_agent",
 }
 
 CONF_Imitate = {
@@ -34,13 +34,13 @@ CONF_Imitate = {
 }
 
 CONF_RL = {
-    "rl_type": "single_ac_mc",
+    "rl_type": "continuous_ac_mc",
     # "lambda": 0.8,
-    "debug": True,
-    "default_lr": 1e-3,
-    "batch_size": 500,
+    "debug": False,
+    "default_lr": 1e-4,
+    "batch_size": 400,
     # "iterations_number": 1000,
     # "save_interval": 100,
-    "entropy_c": 1.e-2,
+    "entropy_c": 5.e-3,
     "entropy_c_decay": 0.3,
 }

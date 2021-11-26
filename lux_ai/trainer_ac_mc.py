@@ -102,7 +102,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
 
                 if self._is_debug:
                     clipped_rhos_v = clipped_rhos.numpy()
-                    values_v = values.numpy()
+                    values_v = tf.squeeze(values).numpy()
 
                 with tape.stop_recording():
                     targets = total_rewards
@@ -170,6 +170,9 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
             }
             with open(save_path, 'wb') as f:
                 pickle.dump(data, f, protocol=4)
+
+            if self._global_var_actor is not None:
+                ray.get(self._global_var_actor.set_done.remote(True))
 
             print("RL training is done.")
 

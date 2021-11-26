@@ -182,7 +182,9 @@ def rl_train(input_data):  # , checkpoint):
     elif config["rl_type"] == "single_pg":
         trainer_pg.pg_agent_run(config, input_data)
     elif config["rl_type"] == "single_ac_mc":
-        trainer_ac_mc.ac_mc_agent_run(config, input_data)
+        data_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in [j for j in range(20)]]
+        data_list = list(itertools.chain.from_iterable(data_list))
+        trainer_ac_mc.ac_mc_agent_run(config, input_data, filenames_in=data_list)
     elif config["rl_type"] == "with_evaluation":
         for i in range(10):
             print(f"RL learning, cycle {i}.")
@@ -316,11 +318,9 @@ def rl_train(input_data):  # , checkpoint):
                     raw_name = pathlib.Path(files[-1]).stem
                     print(f"Training and collecting from {raw_name}.pickle weights.")
 
-            # trainer_pg.pg_agent_run(config, input_data, None, filenames, 0)
-
             ray.init(num_gpus=1, include_dashboard=False)
             # remote objects creation
-            trainer_object = ray.remote(num_gpus=1)(trainer_pg.pg_agent_run)
+            trainer_object = ray.remote(num_gpus=1)(trainer_ac_mc.ac_mc_agent_run)
             eval_object = ray.remote(evaluator.Agent)
             collector_object = ray.remote(collector.collect)
             # initialization
