@@ -10,6 +10,9 @@ from lux_ai import models, tools, tfrecords_storage
 from lux_gym.envs.lux.action_vectors_new import empty_worker_action_vectors
 
 
+# tf.debugging.enable_check_numerics()
+
+
 class Agent(abc.ABC):
     def __init__(self, config, data, global_var_actor=None, filenames=None, current_cycle=None):
 
@@ -30,6 +33,9 @@ class Agent(abc.ABC):
             self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
         elif self._model_name == "actor_critic_residual_six_actions":
             self._model = models.actor_critic_residual_six_actions(6)
+            self._loss_function = tools.LossFunctionSixActions()
+        elif self._model_name == "actor_critic_sep_residual_six_actions":
+            self._model = models.actor_critic_sep_residual_six_actions(6)
             self._loss_function = tools.LossFunctionSixActions()
         elif self._model_name == "actor_critic_efficient_six_actions":
             self._model = models.actor_critic_efficient_six_actions(6)
@@ -66,14 +72,15 @@ class Agent(abc.ABC):
         # for sample in ds_train:
         #     observations = sample[0].numpy()
         #     actions_probs0 = sample[1][0].numpy()
-        #     actions_probs1 = sample[1][1].numpy()
-        #     actions_probs2 = sample[1][2].numpy()
-        #     print(np.sum(actions_probs0, axis=0))
+        #     # actions_probs1 = sample[1][1].numpy()
+        #     # actions_probs2 = sample[1][2].numpy()
+        #     # print(np.sum(actions_probs0, axis=0))
         #     # actions_probs3 = sample[1][3].numpy()
-        #     # total_rewards = sample[1][1].numpy()
-        #     probs_output0, probs_output1, probs_output2, value_output = self._model(observations)
-        #     # probs_output, value_output = self._model(observations)
-        #     probs_output_v = probs_output0.numpy()
+        #     total_rewards = sample[1][1].numpy()
+        #     # probs_output0, probs_output1, probs_output2, value_output = self._model(observations)
+        #     probs_output, value_output = self._model(observations)
+        #     probs_output_v = probs_output.numpy()
+        #     value_output_v = value_output.numpy()
         #     real = np.argmax(actions_probs0, axis=1)
         #     preds = np.argmax(probs_output_v, axis=1)
         #     foo = (real == preds)
@@ -117,6 +124,17 @@ class Agent(abc.ABC):
                 loss={
                     "output_1": self._loss_function,
                     "output_2": None,
+                },
+                metrics={
+                    "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+                },
+            )
+        elif self._model_name == "actor_critic_sep_residual_six_actions":
+            self._model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+                loss={
+                    "output_1": self._loss_function,
+                    "output_2": tf.keras.losses.MeanSquaredError(),
                 },
                 metrics={
                     "output_1": [tf.keras.metrics.CategoricalAccuracy()],

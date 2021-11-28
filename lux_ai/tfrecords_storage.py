@@ -641,10 +641,13 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     # count = 0
     # for item in test_dataset:
     #     foo = read_tfrecord(item)
+    #     ap2 = foo[1][1].numpy()
+    #     if not np.isfinite(ap2).any():
+    #         print("Trololo")
     #     # filter_transfer(*foo)
-    #     foo = random_reverse(*foo)
-    #     foo = random_rotate(*foo)
-    #     foo = split_with_transfer(*foo)
+    #     # foo = random_reverse(*foo)
+    #     # foo = random_rotate(*foo)
+    #     # foo = split_with_transfer(*foo)
     #     count += 1
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
@@ -663,7 +666,9 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     ds = ds.map(random_rotate, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
         ds = ds.map(split_for_shrub, num_parallel_calls=AUTO)
-    elif model_name == "actor_critic_residual_six_actions" or model_name == "actor_critic_efficient_six_actions":
+    elif model_name == "actor_critic_residual_six_actions" \
+            or model_name == "actor_critic_sep_residual_six_actions" \
+            or model_name == "actor_critic_efficient_six_actions":
         if amplify_probs:
             ds = ds.map(merge_actions_amplify, num_parallel_calls=AUTO)
         else:
@@ -847,7 +852,7 @@ def read_records_for_rl_pg(feature_maps_shape, actions_shape, model_name, path,
                                  num_parallel_calls=AUTO
                                  )
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
+    # ds = ds.map(random_reverse_pg, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_six_actions" or model_name == "actor_critic_sep_residual_six_actions":
         ds = ds.map(merge_actions_pg, num_parallel_calls=AUTO)
     else:

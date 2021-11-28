@@ -84,7 +84,7 @@ def collect(input_data):
 
     ray.init(include_dashboard=False)
     collector_object = ray.remote(collector.collect)
-    futures = [collector_object.remote(config, input_data, data_path, j) for j in range(2)]
+    futures = [collector_object.remote(config, input_data, data_path, j, steps=100) for j in range(2)]
     _ = ray.get(futures)
     ray.shutdown()
 
