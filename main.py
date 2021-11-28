@@ -84,7 +84,7 @@ def collect(input_data):
 
     ray.init(include_dashboard=False)
     collector_object = ray.remote(collector.collect)
-    futures = [collector_object.remote(config, input_data, data_path, j, steps=100) for j in range(2)]
+    futures = [collector_object.remote(config, input_data, data_path, j, steps=10) for j in range(2)]
     _ = ray.get(futures)
     ray.shutdown()
 
@@ -182,8 +182,9 @@ def rl_train(input_data):  # , checkpoint):
     elif config["rl_type"] == "single_pg":
         trainer_pg.pg_agent_run(config, input_data)
     elif config["rl_type"] == "single_ac_mc":
-        data_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in [j for j in range(20)]]
-        data_list = list(itertools.chain.from_iterable(data_list))
+        data_list = glob.glob(f"data/tfrecords/rl/storage/*.tfrec")
+        # data_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in [j for j in range(20)]]
+        # data_list = list(itertools.chain.from_iterable(data_list))
         trainer_ac_mc.ac_mc_agent_run(config, input_data, filenames_in=data_list)
     elif config["rl_type"] == "with_evaluation":
         for i in range(10):
@@ -300,7 +301,7 @@ def rl_train(input_data):  # , checkpoint):
     elif config["rl_type"] == "continuous_ac_mc":
         amount_of_pieces = 20
         previous_pieces = collections.deque([i + 2 for i in range(amount_of_pieces - 2)])
-        for i in range(100):
+        for i in range(20):
             print(f"PG learning, cycle {i}.")
             current_n = i % amount_of_pieces  # current and prev to use
             next_n = (i + 1) % amount_of_pieces  # next to collect
@@ -309,6 +310,9 @@ def rl_train(input_data):  # , checkpoint):
             fnames_curr = glob.glob(f"data/tfrecords/rl/storage_{current_n}/*.tfrec")
             fnames_prev_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in previous_pieces]
             fnames_prev_list = list(itertools.chain.from_iterable(fnames_prev_list))
+            self_exp_n = len(fnames_curr) + len(fnames_prev_list)
+            n_fixed = min(int(self_exp_n / 2), len(fnames_fixed))
+            fnames_fixed = random.choices(fnames_fixed, k=n_fixed)
             filenames = fnames_fixed + fnames_prev_list + fnames_curr
 
             files = glob.glob("./data/weights/*.pickle")

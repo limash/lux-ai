@@ -1,6 +1,6 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "imitate",
+    "setup": "rl",
     "model_name": "actor_critic_sep_residual_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
@@ -17,9 +17,9 @@ CONF_Scrape = {
 }
 
 CONF_Collect = {
-    "is_for_imitator": True,
-    "is_for_rl": False,
-    "is_pg_rl": False,
+    "is_for_imitator": False,
+    "is_for_rl": True,
+    "is_pg_rl": True,
     "only_wins": False,
 }
 
@@ -37,10 +37,10 @@ CONF_RL = {
     "rl_type": "continuous_ac_mc",
     # "lambda": 0.8,
     "debug": False,
-    "default_lr": 1e-4,
+    "default_lr": 1e-5,
     "batch_size": 400,
     # "iterations_number": 1000,
     # "save_interval": 100,
-    "entropy_c": 5.e-3,
+    "entropy_c": 1.e-4,
     "entropy_c_decay": 0.3,
 }
