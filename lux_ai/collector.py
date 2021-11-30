@@ -99,19 +99,19 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
             progress = tf.linspace(0., 1., step + 2)[:-1]
             progress = tf.cast(progress, dtype=tf.float16)
 
-            # if reward1 > reward2:
-            #     final_reward_1 = tf.constant(1, dtype=tf.float16)
-            #     final_reward_2 = tf.constant(-1, dtype=tf.float16)
-            # elif reward1 < reward2:
-            #     final_reward_2 = tf.constant(1, dtype=tf.float16)
-            #     final_reward_1 = tf.constant(-1, dtype=tf.float16)
-            # else:
-            #     final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
+            if reward1 > reward2:
+                final_reward_1 = tf.constant(1, dtype=tf.float16)
+                final_reward_2 = tf.constant(-1, dtype=tf.float16)
+            elif reward1 < reward2:
+                final_reward_2 = tf.constant(1, dtype=tf.float16)
+                final_reward_1 = tf.constant(-1, dtype=tf.float16)
+            else:
+                final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
 
-            final_reward_1 = reward1 / REWARD_CAP if reward1 != -1 else 0
-            final_reward_1 = 2 * final_reward_1 - 1
-            final_reward_2 = reward2 / REWARD_CAP if reward2 != -1 else 0
-            final_reward_2 = 2 * final_reward_2 - 1
+            # final_reward_1 = reward1 / REWARD_CAP if reward1 != -1 else 0
+            # final_reward_1 = 2 * final_reward_1 - 1
+            # final_reward_2 = reward2 / REWARD_CAP if reward2 != -1 else 0
+            # final_reward_2 = 2 * final_reward_2 - 1
 
             if self._only_wins:
                 if reward1 > reward2:

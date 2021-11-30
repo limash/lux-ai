@@ -182,9 +182,9 @@ def rl_train(input_data):  # , checkpoint):
     elif config["rl_type"] == "single_pg":
         trainer_pg.pg_agent_run(config, input_data)
     elif config["rl_type"] == "single_ac_mc":
-        data_list = glob.glob(f"data/tfrecords/rl/storage/*.tfrec")
-        # data_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in [j for j in range(20)]]
-        # data_list = list(itertools.chain.from_iterable(data_list))
+        # data_list = glob.glob(f"data/tfrecords/rl/storage/*.tfrec")
+        data_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in [j for j in range(20)]]
+        data_list = list(itertools.chain.from_iterable(data_list))
         trainer_ac_mc.ac_mc_agent_run(config, input_data, filenames_in=data_list)
     elif config["rl_type"] == "with_evaluation":
         for i in range(10):

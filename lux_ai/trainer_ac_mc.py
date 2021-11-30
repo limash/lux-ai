@@ -27,6 +27,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
             self._actions_shape = [item.shape for item in empty_worker_action_vectors]
             self._model_name = config["model_name"]
             self._batch_size = config["batch_size"]
+            self._model_supervised = models.actor_critic_efficient_six_actions(6)
             if self._model_name == "actor_critic_residual_six_actions":
                 self._model = models.actor_critic_residual_six_actions(6)
                 self._model_actions_shape = 6
@@ -42,6 +43,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
             dummy_input = tf.convert_to_tensor(dummy_feature_maps, dtype=tf.float32)
             dummy_input = tf.nest.map_structure(lambda x: tf.expand_dims(x, axis=0), dummy_input)
             self._model(dummy_input)
+            self._model_supervised(dummy_input)
             # load weights
             files = glob.glob("./data/weights/*.pickle")
             files_n = len(files)
@@ -55,6 +57,10 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                 print("Using initial weights.")
             if data:
                 self._model.set_weights(data['weights'])
+            with open('data/data_eff.pickle', 'rb') as file:
+                eff_data = pickle.load(file)
+            self._model_supervised.set_weights(eff_data['weights'])
+            self._class_weights = tf.constant([[1., 1., 1., 1., 1., 1.]])
 
             # self._n_points = config["n_points"]
             # self._iterations_number = config["iterations_number"]
@@ -100,16 +106,23 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     rhos = tf.exp(log_rhos)
                     clipped_rhos = tf.minimum(tf.constant(1.), rhos)
 
+                    probs_supervised, _ = self._model_supervised(observations, training=False)
+
                 if self._is_debug:
                     clipped_rhos_v = clipped_rhos.numpy()
                     values_v = tf.squeeze(values).numpy()
 
                 with tape.stop_recording():
-                    targets = total_rewards
+                    targets = tf.where((total_rewards == 1.), 1.1, total_rewards)
                     td_error = clipped_rhos * (targets - tf.squeeze(values))
 
                 if self._is_debug:
+                    targets_v = targets.numpy()
                     td_error_v = td_error.numpy()
+
+                # supervised loss
+                supervised_loss = tools.base_loss(probs_supervised, probs, self._class_weights)
+                supervised_loss = tf.reduce_sum(supervised_loss)
 
                 # critic loss
                 critic_loss = .5 * tf.reduce_sum(tf.square(targets - tf.squeeze(values)))
@@ -128,7 +141,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     # foo_v = foo.numpy()
                 # entropy_loss = -self._entropy_c * tf.reduce_sum(entropy * foo)
 
-                loss = actor_loss + entropy_loss + critic_loss
+                loss = actor_loss + entropy_loss + critic_loss + supervised_loss
             grads = tape.gradient(loss, self._model.trainable_variables)
             grads = [tf.clip_by_norm(g, 4.0) for g in grads]
             self._optimizer.apply_gradients(zip(grads, self._model.trainable_variables))
