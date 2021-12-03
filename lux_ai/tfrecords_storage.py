@@ -660,7 +660,7 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
                                  num_parallel_calls=AUTO
                                  )
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    if model_name == "actor_critic_residual_six_actions":
+    if model_name == "actor_critic_residual_six_actions" or model_name == "actor_critic_efficient_six_actions":
         ds = ds.filter(filter_transfer)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     ds = ds.map(random_rotate, num_parallel_calls=AUTO)

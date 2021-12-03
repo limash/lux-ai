@@ -1,18 +1,18 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "rl",
-    "model_name": "actor_critic_sep_residual_six_actions",
+    "setup": "imitate",
+    "model_name": "actor_critic_efficient_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
 
 CONF_Scrape = {
     "lux_version": "3.1.0",
-    "scrape_type": "multi",
+    "scrape_type": "single",
     "parallel_calls": 8,
-    "is_for_rl": True,
-    "is_pg_rl": True,
+    "is_for_rl": False,
+    "is_pg_rl": False,
     "team_name": None,  # "Toad Brigade",
-    "only_wins": False,
+    "only_wins": True,
     "only_top_teams": False,
 }
 
@@ -28,7 +28,7 @@ CONF_Evaluate = {
 }
 
 CONF_Imitate = {
-    "batch_size": 300,
+    "batch_size": 150,
     "self_imitation": False,
     "with_evaluation": True,
 }
