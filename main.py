@@ -183,7 +183,7 @@ def rl_train(input_data):  # , checkpoint):
         trainer_pg.pg_agent_run(config, input_data)
     elif config["rl_type"] == "single_ac_mc":
         # data_list = glob.glob(f"data/tfrecords/rl/storage/*.tfrec")
-        data_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in [j for j in range(20)]]
+        data_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in [j for j in range(10)]]
         data_list = list(itertools.chain.from_iterable(data_list))
         trainer_ac_mc.ac_mc_agent_run(config, input_data, filenames_in=data_list)
     elif config["rl_type"] == "with_evaluation":
@@ -299,9 +299,9 @@ def rl_train(input_data):  # , checkpoint):
             previous_pieces[-1] = current_n
             time.sleep(5)
     elif config["rl_type"] == "continuous_ac_mc":
-        amount_of_pieces = 20
+        amount_of_pieces = 10
         previous_pieces = collections.deque([i + 2 for i in range(amount_of_pieces - 2)])
-        for i in range(20):
+        for i in range(10):
             print(f"PG learning, cycle {i}.")
             current_n = i % amount_of_pieces  # current and prev to use
             next_n = (i + 1) % amount_of_pieces  # next to collect

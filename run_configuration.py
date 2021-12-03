@@ -37,7 +37,7 @@ CONF_RL = {
     "rl_type": "continuous_ac_mc",
     # "lambda": 0.8,
     "debug": False,
-    "default_lr": 1e-4,
+    "default_lr": 1e-5,
     "batch_size": 300,
     # "iterations_number": 1000,
     # "save_interval": 100,
