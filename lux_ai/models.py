@@ -355,7 +355,7 @@ def actor_critic_residual_with_transfer():
     return model
 
 
-def actor_critic_residual_shrub(actions_shape):
+def actor_critic_residual_shrub():
     import tensorflow as tf
     import tensorflow.keras as keras
 
@@ -365,7 +365,9 @@ def actor_critic_residual_shrub(actions_shape):
 
             self._filters = filters
             self._activation = activation
-            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer, padding="same", use_bias=False)
+            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer,
+                                             kernel_regularizer=keras.regularizers.l2(l2=1.e-5),
+                                             padding="same", use_bias=False)
             self._norm = keras.layers.BatchNormalization()
 
         def call(self, inputs, training=False, **kwargs):
@@ -377,37 +379,6 @@ def actor_critic_residual_shrub(actions_shape):
             batch, x, y, _ = batch_input_shape
             return [batch, x, y, self._filters]
 
-    class CriticBranch(keras.layers.Layer):
-        def __init__(self, filters, initializer, activation, layers, **kwargs):
-            super().__init__(**kwargs)
-
-            self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
-            self._depthwise = keras.layers.DepthwiseConv2D(13)
-            self._flatten = keras.layers.Flatten()
-            self._fc_128 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
-
-        def call(self, inputs, training=False, **kwargs):
-            x, center = inputs
-
-            for layer in self._residual_block:
-                x = layer(x, training=training)
-
-            shape_x = tf.shape(x)
-            y = tf.reshape(x, (shape_x[0], -1, shape_x[-1]))
-            y = tf.reduce_mean(y, axis=1)
-
-            z1 = (x * center)
-            shape_z = tf.shape(z1)
-            z1 = tf.reshape(z1, (shape_z[0], -1, shape_z[-1]))
-            z1 = tf.reduce_sum(z1, axis=1)
-            z2 = self._depthwise(x)
-            z2 = self._flatten(z2)
-            z = tf.concat([z1, z2], axis=1)
-            z = self._fc_128(z)
-
-            baseline = self._baseline(tf.concat([y, z], axis=1))
-            return baseline
-
     class ActorBranch(keras.layers.Layer):
         def __init__(self, filters, initializer, activation, layers, **kwargs):
             super().__init__(**kwargs)
@@ -415,7 +386,7 @@ def actor_critic_residual_shrub(actions_shape):
             self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
             self._depthwise = keras.layers.DepthwiseConv2D(13)
             self._flatten = keras.layers.Flatten()
-            self._fc_128 = keras.layers.Dense(128, activation=activation, kernel_initializer=initializer)
+            self._fc = keras.layers.Dense(filters, activation=activation, kernel_initializer=initializer)
 
         def call(self, inputs, training=False, **kwargs):
             x, center = inputs
@@ -430,46 +401,50 @@ def actor_critic_residual_shrub(actions_shape):
             z2 = self._depthwise(x)
             z2 = self._flatten(z2)
             z = tf.concat([z1, z2], axis=1)
-            z = self._fc_128(z)
+            z = self._fc(z)
             return z
 
     class ResidualModel(keras.Model):
-        def __init__(self, actions_number, **kwargs):
+        def __init__(self, **kwargs):
             super().__init__(**kwargs)
 
-            filters = 128
-            # stem_layers = 0
-            branch_layers = 12
+            filters = 200
+            stem_layers = 6
+            branch_layers = 4
 
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
             initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
             activation = keras.activations.relu
 
-            self._root = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer, use_bias=False)
+            self._root = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer,
+                                             kernel_regularizer=keras.regularizers.l2(l2=1.e-5),
+                                             use_bias=False)
             self._root_norm = keras.layers.BatchNormalization()
             self._root_activation = keras.layers.ReLU()
-            # self._stem = [ResidualUnit(filters, initializer, activation) for _ in range(stem_layers)]
 
-            # action type
-            self._action_type_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._action_type = keras.layers.Dense(actions_number[0][0], activation="softmax",
-                                                   kernel_initializer=initializer_random)
             # movement direction
-            self._movement_direction_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._movement_direction = keras.layers.Dense(actions_number[1][0], activation="softmax",
+            self._movement_direction_branch = ActorBranch(filters, initializer, activation, layers=10)
+            self._movement_direction = keras.layers.Dense(4, activation="softmax",
                                                           kernel_initializer=initializer_random)
+
+            self._stem = [ResidualUnit(filters, initializer, activation) for _ in range(stem_layers)]
+            # build
+            self._build_branch = ActorBranch(filters, initializer, activation, branch_layers)
+            self._build = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            # idle
+            self._idle_branch = ActorBranch(filters, initializer, activation, branch_layers)
+            self._idle = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            # transfer
+            self._transfer_branch = ActorBranch(filters, initializer, activation, branch_layers)
+            self._transfer = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
             # transfer direction
             self._transfer_direction_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._transfer_direction = keras.layers.Dense(actions_number[1][0], activation="softmax",
+            self._transfer_direction = keras.layers.Dense(4, activation="softmax",
                                                           kernel_initializer=initializer_random)
             # resource to transfer
             self._transfer_resource_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._transfer_resource = keras.layers.Dense(actions_number[2][0], activation="softmax",
+            self._transfer_resource = keras.layers.Dense(3, activation="softmax",
                                                          kernel_initializer=initializer_random)
-            # critic part
-            self._critic_branch = CriticBranch(filters, initializer, activation, branch_layers)
-            self._baseline = keras.layers.Dense(1, kernel_initializer=initializer_random,
-                                                activation=keras.activations.tanh)
 
         def call(self, inputs, training=False, mask=None):
             features = inputs
@@ -479,33 +454,192 @@ def actor_critic_residual_shrub(actions_shape):
             x = self._root_norm(x, training=training)
             x = self._root_activation(x)
 
-            # for layer in self._stem:
-            #     x = layer(x, training=training)
-
             center = features[:, :, :, :1]
-            z = (x, center)
+            z1 = (x, center)
 
-            w1 = self._action_type_branch(z, training=training)
-            action_type_probs = self._action_type(w1)
+            w1 = self._movement_direction_branch(z1, training=training)
+            movement_direction_probs = self._movement_direction(w1)
 
-            w2 = self._movement_direction_branch(z, training=training)
-            movement_direction_probs = self._movement_direction(w2)
+            for layer in self._stem:
+                x = layer(x, training=training)
+            z2 = (x, center)
 
-            w3 = self._transfer_direction_branch(z, training=training)
-            transfer_direction_probs = self._transfer_direction(w3)
+            w2 = self._build_branch(z2, training=training)
+            build_switch = self._build(w2)
 
-            w4 = self._transfer_resource_branch(z, training=training)
-            transfer_resource_probs = self._transfer_resource(w4)
+            w3 = self._idle_branch(z2, training=training)
+            idle_switch = self._idle(w3)
 
-            # w5 = self._critic_branch(z, training=training)
-            # baseline = self._baseline(w5)
+            w4 = self._transfer_branch(z2, training=training)
+            transfer_switch = self._transfer(w4)
 
-            return action_type_probs, movement_direction_probs, transfer_direction_probs, transfer_resource_probs, None
+            w5 = self._transfer_direction_branch(z2, training=training)
+            transfer_direction_probs = self._transfer_direction(w5)
+
+            w6 = self._transfer_resource_branch(z2, training=training)
+            transfer_resource_probs = self._transfer_resource(w6)
+
+            return movement_direction_probs, build_switch, idle_switch, \
+                   transfer_switch, transfer_direction_probs, transfer_resource_probs
 
         def get_config(self):
             pass
 
-    model = ResidualModel(actions_shape)
+    model = ResidualModel()
+    return model
+
+
+def actor_critic_residual_switch_shrub():
+    import tensorflow as tf
+    import tensorflow.keras as keras
+
+    class ResidualUnit(keras.layers.Layer):
+        def __init__(self, filters, initializer, activation, **kwargs):
+            super().__init__(**kwargs)
+
+            self._filters = filters
+            self._activation = activation
+            self._conv = keras.layers.Conv2D(filters, 3, kernel_initializer=initializer,
+                                             kernel_regularizer=keras.regularizers.l2(l2=1.e-5),
+                                             padding="same", use_bias=False)
+            self._norm = keras.layers.BatchNormalization()
+
+        def call(self, inputs, training=False, **kwargs):
+            x = self._conv(inputs)
+            x = self._norm(x, training=training)
+            return self._activation(inputs + x)
+
+        def compute_output_shape(self, batch_input_shape):
+            batch, x, y, _ = batch_input_shape
+            return [batch, x, y, self._filters]
+
+    class ActorBranch(keras.layers.Layer):
+        def __init__(self, filters, initializer, activation, layers, **kwargs):
+            super().__init__(**kwargs)
+
+            self._residual_block = [ResidualUnit(filters, initializer, activation) for _ in range(layers)]
+            self._depthwise = keras.layers.DepthwiseConv2D(13)
+            self._flatten = keras.layers.Flatten()
+            self._fc = keras.layers.Dense(filters, activation=activation, kernel_initializer=initializer)
+
+        def call(self, inputs, training=False, **kwargs):
+            x, center = inputs
+
+            for layer in self._residual_block:
+                x = layer(x, training=training)
+
+            z1 = (x * center)
+            shape_z = tf.shape(z1)
+            z1 = tf.reshape(z1, (shape_z[0], -1, shape_z[-1]))
+            z1 = tf.reduce_sum(z1, axis=1)
+            z2 = self._depthwise(x)
+            z2 = self._flatten(z2)
+            z = tf.concat([z1, z2], axis=1)
+            z = self._fc(z)
+            return z
+
+    class ResidualModel(keras.Model):
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+
+            filters = 200
+            stem_layers1 = 4
+            branch_layers1 = 6
+            stem_layers2 = 6
+            branch_layers2 = 4
+
+            initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
+            initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
+            activation = keras.activations.relu
+
+            self._root = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer,
+                                             kernel_regularizer=keras.regularizers.l2(l2=1.e-5),
+                                             use_bias=False)
+            self._root_norm = keras.layers.BatchNormalization()
+            self._root_activation = keras.layers.ReLU()
+
+            # stem1
+            self._stem1 = [ResidualUnit(filters, initializer, activation) for _ in range(stem_layers1)]
+            # movement directions
+            self._north_branch = ActorBranch(filters, initializer, activation, branch_layers1)
+            self._north = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            self._east_branch = ActorBranch(filters, initializer, activation, branch_layers1)
+            self._east = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            self._south_branch = ActorBranch(filters, initializer, activation, branch_layers1)
+            self._south = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            self._west_branch = ActorBranch(filters, initializer, activation, branch_layers1)
+            self._west = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            # build
+            self._build_branch = ActorBranch(filters, initializer, activation, branch_layers1)
+            self._build = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            # idle
+            self._idle_branch = ActorBranch(filters, initializer, activation, branch_layers1)
+            self._idle = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+
+            # stem2
+            self._stem2 = [ResidualUnit(filters, initializer, activation) for _ in range(stem_layers2)]
+            # transfer
+            self._transfer_branch = ActorBranch(filters, initializer, activation, branch_layers2)
+            self._transfer = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
+            # transfer direction
+            self._transfer_direction_branch = ActorBranch(filters, initializer, activation, branch_layers2)
+            self._transfer_direction = keras.layers.Dense(4, activation="softmax",
+                                                          kernel_initializer=initializer_random)
+            # resource to transfer
+            self._transfer_resource_branch = ActorBranch(filters, initializer, activation, branch_layers2)
+            self._transfer_resource = keras.layers.Dense(3, activation="softmax",
+                                                         kernel_initializer=initializer_random)
+
+        def call(self, inputs, training=False, mask=None):
+            features = inputs
+            x = features
+            center = features[:, :, :, :1]
+
+            x = self._root(x)
+            x = self._root_norm(x, training=training)
+            x = self._root_activation(x)
+
+            x1 = x
+            for layer in self._stem1:
+                x1 = layer(x1, training=training)
+            z1 = (x1, center)
+
+            wn = self._north_branch(z1, training=training)
+            north_switch = self._north(wn)
+            we = self._east_branch(z1, training=training)
+            east_switch = self._east(we)
+            ws = self._south_branch(z1, training=training)
+            south_switch = self._south(ws)
+            ww = self._west_branch(z1, training=training)
+            west_switch = self._west(ww)
+
+            wb = self._build_branch(z1, training=training)
+            build_switch = self._build(wb)
+
+            wi = self._idle_branch(z1, training=training)
+            idle_switch = self._idle(wi)
+
+            x2 = x
+            for layer in self._stem2:
+                x2 = layer(x2, training=training)
+            z2 = (x2, center)
+
+            wt = self._transfer_branch(z2, training=training)
+            transfer_switch = self._transfer(wt)
+
+            w_td = self._transfer_direction_branch(z2, training=training)
+            transfer_direction_probs = self._transfer_direction(w_td)
+
+            w_tr = self._transfer_resource_branch(z2, training=training)
+            transfer_resource_probs = self._transfer_resource(w_tr)
+
+            return north_switch, east_switch, south_switch, west_switch, build_switch, idle_switch, \
+                   transfer_switch, transfer_direction_probs, transfer_resource_probs
+
+        def get_config(self):
+            pass
+
+    model = ResidualModel()
     return model
 
 
