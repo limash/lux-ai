@@ -21,11 +21,19 @@ class Agent(abc.ABC):
         self._model_name = config["model_name"]
         self._batch_size = config["batch_size"]
         if self._model_name == "actor_critic_residual_shrub":
-            self._model = models.actor_critic_residual_shrub(self._actions_shape)
+            self._model = models.actor_critic_residual_shrub()
             self._loss_function1 = tools.LossFunction1()
             self._loss_function2_0 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
             self._loss_function2_1 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
             self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
+        elif self._model_name == "actor_critic_residual_switch_shrub":
+            self._model = models.actor_critic_residual_switch_shrub()
+            self._loss_function_movements = tools.LossFunctionSwitch(tf.constant([[.1, 1.]], dtype=tf.float32))
+            self._loss_function_build = tools.LossFunctionSwitch(tf.constant([[.02, 1.]], dtype=tf.float32))
+            self._loss_function_idle = tools.LossFunctionSwitch(tf.constant([[1., .5]], dtype=tf.float32))
+            self._loss_function_transfer = tools.LossFunctionSwitch(tf.constant([[.02, 1.]], dtype=tf.float32))
+            self._loss_function_transfer_dir = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
+            self._loss_function_transfer_res = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
         elif self._model_name == "actor_critic_residual_with_transfer":
             self._model = models.actor_critic_residual_with_transfer()
             self._loss_function1 = tools.LossFunctionSevenActions()
@@ -91,6 +99,51 @@ class Agent(abc.ABC):
         #     skewed_loss3 = self._loss_function3(sample[1][2], probs_output2)
         #     # skewed_loss4 = self._loss_function3(sample[1][3], probs_output3)
 
+        # for sample in ds_train:
+        #     print("------")
+        #     observations = sample[0].numpy()
+        #     north_switch = sample[1][0].numpy()
+        #     print(f"North: {np.sum(north_switch, axis=0)}")
+        #     east_switch = sample[1][1].numpy()
+        #     print(f"East: {np.sum(east_switch, axis=0)}")
+        #     south_switch = sample[1][2].numpy()
+        #     print(f"South: {np.sum(south_switch, axis=0)}")
+        #     west_switch = sample[1][3].numpy()
+        #     print(f"West: {np.sum(west_switch, axis=0)}")
+        #     build_switch = sample[1][4].numpy()
+        #     print(f"Build: {np.sum(build_switch, axis=0)}")
+        #     idle_switch = sample[1][5].numpy()
+        #     print(f"Idle: {np.sum(idle_switch, axis=0)}")
+        #     transfer_switch = sample[1][6].numpy()
+        #     print(f"Transfer: {np.sum(transfer_switch, axis=0)}")
+        #     transfer_dir_probs = sample[1][7].numpy()
+        #     transfer_res_probs = sample[1][8].numpy()
+        #     ns, es, ss, ws, bs, idles, ts, t_probs, t_res = self._model(observations)
+        #     ns_v = ns.numpy()
+        #     es_v = es.numpy()
+        #     ss_v = ss.numpy()
+        #     ws_v = ws.numpy()
+        #     bs_v = bs.numpy()
+        #     idles_v = idles.numpy()
+        #     ts_v = ts.numpy()
+        #     t_probs_v = t_probs.numpy()
+        #     t_res_v = t_res.numpy()
+        #     real = np.argmax(north_switch, axis=1)
+        #     preds = np.argmax(ns_v, axis=1)
+        #     foo = (real == preds)
+        #     print(np.sum(foo)/self._batch_size)
+        #     skewed_loss_ns = self._loss_function_movements(sample[1][0], ns)
+        #     skewed_loss_es = self._loss_function_movements(sample[1][1], es)
+        #     skewed_loss_ss = self._loss_function_movements(sample[1][2], ss)
+        #     skewed_loss_ws = self._loss_function_movements(sample[1][3], ws)
+
+        #     skewed_loss_build = self._loss_function_build(sample[1][4], bs)
+        #     skewed_loss_idle = self._loss_function_idle(sample[1][5], idles)
+
+        #     skewed_loss_transfer = self._loss_function_transfer(sample[1][6], ts)
+        #     skewed_loss_transfer_dir = self._loss_function_transfer_dir(sample[1][7], t_probs)
+        #     skewed_loss_transfer_res = self._loss_function_transfer_res(sample[1][8], t_res)
+
         if self._model_name == "actor_critic_residual_shrub":
             self._model.compile(
                 optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
@@ -100,6 +153,24 @@ class Agent(abc.ABC):
                     "output_3": self._loss_function2_1,
                     "output_4": self._loss_function3,
                     "output_5": None  # tf.keras.losses.MeanSquaredError()
+                },
+                metrics={
+                    "output_1": [tf.keras.metrics.CategoricalAccuracy()],
+                },
+            )
+        elif self._model_name == "actor_critic_residual_switch_shrub":
+            self._model.compile(
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                loss={
+                    "output_1": self._loss_function_movements,
+                    "output_2": self._loss_function_movements,
+                    "output_3": self._loss_function_movements,
+                    "output_4": self._loss_function_movements,
+                    "output_5": self._loss_function_build,
+                    "output_6": self._loss_function_idle,
+                    "output_7": self._loss_function_transfer,
+                    "output_8": self._loss_function_transfer_dir,
+                    "output_9": self._loss_function_transfer_res,
                 },
                 metrics={
                     "output_1": [tf.keras.metrics.CategoricalAccuracy()],
@@ -161,8 +232,8 @@ class Agent(abc.ABC):
         #     patience=10,
         #     restore_best_weights=False,
         # )
-        self._model.fit(ds_train, epochs=10,  # validation_data=ds_valid,
-                        verbose=2,
+        self._model.fit(ds_train, epochs=1,  # validation_data=ds_valid,
+                        # verbose=2,
                         callbacks=[save_weights_callback, ]
                         )
         weights = self._model.get_weights()

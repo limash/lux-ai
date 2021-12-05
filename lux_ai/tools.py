@@ -28,6 +28,16 @@ def base_loss(y_true, y_pred, class_weights):
     return tf.reduce_sum(class_weights * y_true * tf.math.log(y_true / y_pred), axis=-1)
 
 
+class LossFunctionSwitch(tf.keras.losses.Loss):
+    def __init__(self, class_weights, **kwargs):
+        super().__init__(**kwargs)
+        self._class_weights = class_weights
+
+    def call(self, y_true, y_pred):
+        loss = base_loss(y_true, y_pred, self._class_weights)
+        return loss
+
+
 class LossFunctionSixActions(tf.keras.losses.Loss):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

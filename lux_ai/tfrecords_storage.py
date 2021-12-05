@@ -480,6 +480,34 @@ def split_for_shrub(observation, inputs):
         return observation, (action_probs_1, zeros, zeros, action_probs_3, reward)
 
 
+def split_for_switch_shrub(observation, inputs):
+    action_probs_1, action_probs_2, action_probs_3, reward = inputs
+    on = tf.constant([0, 1], dtype=tf.float32)
+    off = tf.constant([1, 0], dtype=tf.float32)
+    zeros = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+    # north_switch, east_switch, south_switch, west_switch, build_switch, idle_switch,
+    # transfer_switch, transfer_direction_probs, transfer_resource_probs
+    if action_probs_1[0] == 1:  # movement action
+        if action_probs_2[0] == 1:  # north
+            return observation, (on, off, off, off, off, off, off, zeros, action_probs_3)
+        elif action_probs_2[1] == 1:  # east
+            return observation, (off, on, off, off, off, off, off, zeros, action_probs_3)
+        elif action_probs_2[2] == 1:  # south
+            return observation, (off, off, on, off, off, off, off, zeros, action_probs_3)
+        elif action_probs_2[3] == 1:  # west
+            return observation, (off, off, off, on, off, off, off, zeros, action_probs_3)
+        else:
+            return observation, (off, off, off, off, off, off, off, zeros, action_probs_3)
+    elif action_probs_1[1] == 1:  # transfer action
+        return observation, (off, off, off, off, off, off, on, action_probs_2, action_probs_3)
+    elif action_probs_1[2] == 1:  # idle
+        return observation, (off, off, off, off, off, on, off, zeros, action_probs_3)
+    elif action_probs_1[3] == 1:  # bcity
+        return observation, (off, off, off, off, on, off, off, zeros, action_probs_3)
+    else:
+        return observation, (off, off, off, off, off, off, off, zeros, action_probs_3)
+
+
 def split_with_transfer(observation, inputs):
     act_probs, dir_probs, res_probs, reward = inputs
     movements = dir_probs * act_probs[0]
@@ -645,9 +673,9 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     #     if not np.isfinite(ap2).any():
     #         print("Trololo")
     #     # filter_transfer(*foo)
-    #     # foo = random_reverse(*foo)
-    #     # foo = random_rotate(*foo)
-    #     # foo = split_with_transfer(*foo)
+    #     foo = random_reverse(*foo)
+    #     foo = random_rotate(*foo)
+    #     foo = split_for_switch_shrub(*foo)
     #     count += 1
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
@@ -666,6 +694,8 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     ds = ds.map(random_rotate, num_parallel_calls=AUTO)
     if model_name == "actor_critic_residual_shrub":
         ds = ds.map(split_for_shrub, num_parallel_calls=AUTO)
+    elif model_name == "actor_critic_residual_switch_shrub":
+        ds = ds.map(split_for_switch_shrub, num_parallel_calls=AUTO)
     elif model_name == "actor_critic_residual_six_actions" \
             or model_name == "actor_critic_sep_residual_six_actions" \
             or model_name == "actor_critic_efficient_six_actions":
