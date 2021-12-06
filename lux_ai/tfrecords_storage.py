@@ -470,14 +470,13 @@ def random_reverse_pg(act_numbers, act_probs, dir_probs, res_probs, observations
 
 def split_for_shrub(observation, inputs):
     action_probs_1, action_probs_2, action_probs_3, reward = inputs
-    zeros = tf.constant([0, 0, 0, 0], dtype=tf.float32)
-    if action_probs_1[0] == 1:  # movement action
-        # action type, movement direction, transfer direction, resource to transfer, reward
-        return observation, (action_probs_1, action_probs_2, zeros, action_probs_3, reward)
-    elif action_probs_1[1] == 1:  # transfer action
-        return observation, (action_probs_1, zeros, action_probs_2, action_probs_3, reward)
+    if action_probs_1[1] == 1:  # transfer action
+        zeros4 = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+        zeros3 = tf.constant([0, 0, 0, 0], dtype=tf.float32)
+        return observation, (zeros4, zeros3)
     else:
-        return observation, (action_probs_1, zeros, zeros, action_probs_3, reward)
+        mbi = tf.stack([action_probs_1[0], action_probs_1[3], action_probs_1[2]], axis=0)
+        return observation, (action_probs_2, mbi)
 
 
 def split_for_switch_shrub(observation, inputs):
@@ -587,7 +586,7 @@ def merge_actions_amplify(observation, inputs):
     bcity = act_probs[3:]
     row_probs = tf.concat([movements, idle, bcity], axis=0)
     row_logs = tf.math.log(row_probs)  # it produces infs, but softmax seems to be fine with it
-    new_probs = tf.nn.softmax(row_logs*2)  # normalize and amplify action probs
+    new_probs = tf.nn.softmax(row_logs * 2)  # normalize and amplify action probs
     if tf.reduce_any(tf.math.is_nan(new_probs)):
         new_probs = row_probs
     return observation, (new_probs, reward)
@@ -672,10 +671,10 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
     #     ap2 = foo[1][1].numpy()
     #     if not np.isfinite(ap2).any():
     #         print("Trololo")
-    #     # filter_transfer(*foo)
+    #     filter_transfer(*foo)
     #     foo = random_reverse(*foo)
     #     foo = random_rotate(*foo)
-    #     foo = split_for_switch_shrub(*foo)
+    #     foo = split_for_shrub(*foo)
     #     count += 1
 
     # filenames_ds = tf.data.TFRecordDataset(filenames, num_parallel_reads=AUTO)
@@ -688,7 +687,8 @@ def read_records_for_imitator(feature_maps_shape, actions_shape, model_name, pat
                                  num_parallel_calls=AUTO
                                  )
     ds = ds.map(read_tfrecord, num_parallel_calls=AUTO)
-    if model_name == "actor_critic_residual_six_actions" or model_name == "actor_critic_efficient_six_actions":
+    if (model_name == "actor_critic_residual_six_actions" or model_name == "actor_critic_efficient_six_actions" or
+            model_name == "actor_critic_residual_shrub"):
         ds = ds.filter(filter_transfer)
     ds = ds.map(random_reverse, num_parallel_calls=AUTO)
     ds = ds.map(random_rotate, num_parallel_calls=AUTO)
@@ -761,7 +761,7 @@ def read_records_for_rl(feature_maps_shape, actions_shape, trajectory_steps, mod
 
         final_idx = example["final_idx"]
         final_idx.set_shape(())
-        start_idx = tf.random.uniform(shape=(), minval=0, maxval=final_idx+1, dtype=tf.int64)
+        start_idx = tf.random.uniform(shape=(), minval=0, maxval=final_idx + 1, dtype=tf.int64)
 
         return tf.cast(actions_numbers[start_idx: start_idx + trajectory_steps, :], dtype=tf.int32), \
                tf.cast(actions_probs_1[start_idx: start_idx + trajectory_steps, :], dtype=tf.float32), \

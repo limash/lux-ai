@@ -408,79 +408,53 @@ def actor_critic_residual_shrub():
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
 
-            filters = 200
-            stem_layers = 6
-            branch_layers = 4
-
             initializer = keras.initializers.VarianceScaling(scale=2.0, mode='fan_in', distribution='truncated_normal')
             initializer_random = keras.initializers.random_uniform(minval=-0.03, maxval=0.03)
             activation = keras.activations.relu
 
-            self._root = keras.layers.Conv2D(filters, 3, padding="same", kernel_initializer=initializer,
-                                             kernel_regularizer=keras.regularizers.l2(l2=1.e-5),
-                                             use_bias=False)
-            self._root_norm = keras.layers.BatchNormalization()
-            self._root_activation = keras.layers.ReLU()
-
+            # movements branch
+            self._root1 = keras.layers.Conv2D(256, 3, padding="same", kernel_initializer=initializer,
+                                              kernel_regularizer=keras.regularizers.l2(l2=1.e-5),
+                                              use_bias=False)
+            self._root_norm1 = keras.layers.BatchNormalization()
+            self._root_activation1 = keras.layers.ReLU()
             # movement direction
-            self._movement_direction_branch = ActorBranch(filters, initializer, activation, layers=10)
+            self._movement_direction_branch = ActorBranch(256, initializer, activation, layers=11)
             self._movement_direction = keras.layers.Dense(4, activation="softmax",
                                                           kernel_initializer=initializer_random)
 
-            self._stem = [ResidualUnit(filters, initializer, activation) for _ in range(stem_layers)]
-            # build
-            self._build_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._build = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
-            # idle
-            self._idle_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._idle = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
-            # transfer
-            self._transfer_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._transfer = keras.layers.Dense(2, activation="softmax", kernel_initializer=initializer_random)
-            # transfer direction
-            self._transfer_direction_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._transfer_direction = keras.layers.Dense(4, activation="softmax",
-                                                          kernel_initializer=initializer_random)
-            # resource to transfer
-            self._transfer_resource_branch = ActorBranch(filters, initializer, activation, branch_layers)
-            self._transfer_resource = keras.layers.Dense(3, activation="softmax",
-                                                         kernel_initializer=initializer_random)
+            # move idle bcity
+            self._root2 = keras.layers.Conv2D(128, 3, padding="same", kernel_initializer=initializer,
+                                              kernel_regularizer=keras.regularizers.l2(l2=1.e-5),
+                                              use_bias=False)
+            self._root_norm2 = keras.layers.BatchNormalization()
+            self._root_activation2 = keras.layers.ReLU()
+            self._move_build_idle_branch = ActorBranch(128, initializer, activation, layers=11)
+            self._mbi = keras.layers.Dense(3, activation="softmax", kernel_initializer=initializer_random)
 
         def call(self, inputs, training=False, mask=None):
-            features = inputs
-            x = features
+            x1 = inputs
+            center = inputs[:, :, :, :1]
 
-            x = self._root(x)
-            x = self._root_norm(x, training=training)
-            x = self._root_activation(x)
+            x1 = self._root1(x1)
+            x1 = self._root_norm1(x1, training=training)
+            x1 = self._root_activation1(x1)
 
-            center = features[:, :, :, :1]
-            z1 = (x, center)
-
+            z1 = (x1, center)
             w1 = self._movement_direction_branch(z1, training=training)
             movement_direction_probs = self._movement_direction(w1)
 
-            for layer in self._stem:
-                x = layer(x, training=training)
-            z2 = (x, center)
+            x2 = inputs
 
-            w2 = self._build_branch(z2, training=training)
-            build_switch = self._build(w2)
+            x2 = self._root2(x2)
+            x2 = self._root_norm2(x2, training=training)
+            x2 = self._root_activation2(x2)
 
-            w3 = self._idle_branch(z2, training=training)
-            idle_switch = self._idle(w3)
+            z2 = (x2, center)
+            w2 = self._move_build_idle_branch(z2, training=training)
+            mbi_probs = self._mbi(w2)
 
-            w4 = self._transfer_branch(z2, training=training)
-            transfer_switch = self._transfer(w4)
-
-            w5 = self._transfer_direction_branch(z2, training=training)
-            transfer_direction_probs = self._transfer_direction(w5)
-
-            w6 = self._transfer_resource_branch(z2, training=training)
-            transfer_resource_probs = self._transfer_resource(w6)
-
-            return movement_direction_probs, build_switch, idle_switch, \
-                   transfer_switch, transfer_direction_probs, transfer_resource_probs
+            return movement_direction_probs, mbi_probs
 
         def get_config(self):
             pass

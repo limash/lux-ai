@@ -1,7 +1,7 @@
 CONF_Main = {
     "environment": "lux_gym:lux-v0",
-    "setup": "imitate",
-    "model_name": "actor_critic_residual_switch_shrub",
+    "setup": "rl",
+    "model_name": "actor_critic_sep_residual_six_actions",
     "n_points": 40,  # check tfrecords reading transformation merge_rl
 }
 
@@ -28,16 +28,16 @@ CONF_Evaluate = {
 }
 
 CONF_Imitate = {
-    "batch_size": 150,
+    "batch_size": 300,
     "self_imitation": False,
-    "with_evaluation": False,
+    "with_evaluation": True,
 }
 
 CONF_RL = {
     "rl_type": "continuous_ac_mc",
     # "lambda": 0.8,
     "debug": False,
-    "default_lr": 1e-5,
+    "default_lr": 1e-6,
     "batch_size": 300,
     # "iterations_number": 1000,
     # "save_interval": 100,

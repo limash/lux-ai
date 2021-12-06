@@ -1,4 +1,5 @@
 import pickle
+import os
 import glob
 import random
 import pathlib
@@ -306,6 +307,9 @@ def rl_train(input_data):  # , checkpoint):
             current_n = i % amount_of_pieces  # current and prev to use
             next_n = (i + 1) % amount_of_pieces  # next to collect
             data_path = f"data/tfrecords/rl/storage_{next_n}/"  # path to save in
+            files_to_delete = glob.glob(data_path + "*")
+            for f in files_to_delete:
+                os.remove(f)
             fnames_fixed = glob.glob("data/tfrecords/rl/storage/*.tfrec")
             fnames_curr = glob.glob(f"data/tfrecords/rl/storage_{current_n}/*.tfrec")
             fnames_prev_list = [glob.glob(f"data/tfrecords/rl/storage_{i}/*.tfrec") for i in previous_pieces]

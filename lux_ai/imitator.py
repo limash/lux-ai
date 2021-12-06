@@ -22,10 +22,8 @@ class Agent(abc.ABC):
         self._batch_size = config["batch_size"]
         if self._model_name == "actor_critic_residual_shrub":
             self._model = models.actor_critic_residual_shrub()
-            self._loss_function1 = tools.LossFunction1()
-            self._loss_function2_0 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
-            self._loss_function2_1 = tools.LossFunction2(tf.constant([self._batch_size], dtype=tf.int64))
-            self._loss_function3 = tools.LossFunction3(tf.constant([self._batch_size], dtype=tf.int64))
+            self._loss_function_movements = tools.LossFunction2()
+            self._loss_function_mbi = tools.LossFunction1(tf.constant([[1., 2., .05]], dtype=tf.float32))
         elif self._model_name == "actor_critic_residual_switch_shrub":
             self._model = models.actor_critic_residual_switch_shrub()
             self._loss_function_movements = tools.LossFunctionSwitch(tf.constant([[.1, 1.]], dtype=tf.float32))
@@ -80,23 +78,23 @@ class Agent(abc.ABC):
         # for sample in ds_train:
         #     observations = sample[0].numpy()
         #     actions_probs0 = sample[1][0].numpy()
-        #     # actions_probs1 = sample[1][1].numpy()
+        #     actions_probs1 = sample[1][1].numpy()
         #     # actions_probs2 = sample[1][2].numpy()
-        #     # print(np.sum(actions_probs0, axis=0))
+        #     print(np.sum(actions_probs1, axis=0))
         #     # actions_probs3 = sample[1][3].numpy()
-        #     total_rewards = sample[1][1].numpy()
+        #     # total_rewards = sample[1][1].numpy()
         #     # probs_output0, probs_output1, probs_output2, value_output = self._model(observations)
-        #     probs_output, value_output = self._model(observations)
+        #     probs_output, mbi_output = self._model(observations)
         #     probs_output_v = probs_output.numpy()
-        #     value_output_v = value_output.numpy()
-        #     real = np.argmax(actions_probs0, axis=1)
-        #     preds = np.argmax(probs_output_v, axis=1)
-        #     foo = (real == preds)
-        #     print(np.sum(foo)/self._batch_size)
+        #     mbi_output_v = mbi_output.numpy()
+        #     # real = np.argmax(actions_probs0, axis=1)
+        #     # preds = np.argmax(probs_output_v, axis=1)
+        #     # foo = (real == preds)
+        #     # print(np.sum(foo)/self._batch_size)
         #     # skewed_loss = self._loss_function(sample[1][0], probs_output)
-        #     skewed_loss1 = self._loss_function1(sample[1][0], probs_output0)
-        #     skewed_loss2 = self._loss_function2(sample[1][1], probs_output1)
-        #     skewed_loss3 = self._loss_function3(sample[1][2], probs_output2)
+        #     skewed_loss1 = self._loss_function_movements(sample[1][0], probs_output)
+        #     skewed_loss2 = self._loss_function_mbi(sample[1][1], mbi_output)
+        #     # skewed_loss3 = self._loss_function3(sample[1][2], probs_output2)
         #     # skewed_loss4 = self._loss_function3(sample[1][3], probs_output3)
 
         # for sample in ds_train:
@@ -146,13 +144,10 @@ class Agent(abc.ABC):
 
         if self._model_name == "actor_critic_residual_shrub":
             self._model.compile(
-                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
                 loss={
-                    "output_1": self._loss_function1,
-                    "output_2": self._loss_function2_0,
-                    "output_3": self._loss_function2_1,
-                    "output_4": self._loss_function3,
-                    "output_5": None  # tf.keras.losses.MeanSquaredError()
+                    "output_1": self._loss_function_movements,
+                    "output_2": self._loss_function_mbi,
                 },
                 metrics={
                     "output_1": [tf.keras.metrics.CategoricalAccuracy()],
@@ -232,8 +227,8 @@ class Agent(abc.ABC):
         #     patience=10,
         #     restore_best_weights=False,
         # )
-        self._model.fit(ds_train, epochs=1,  # validation_data=ds_valid,
-                        # verbose=2,
+        self._model.fit(ds_train, epochs=5,  # validation_data=ds_valid,
+                        verbose=2,
                         callbacks=[save_weights_callback, ]
                         )
         weights = self._model.get_weights()
