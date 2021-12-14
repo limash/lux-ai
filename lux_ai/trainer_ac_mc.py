@@ -106,15 +106,15 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     rhos = tf.exp(log_rhos)
                     clipped_rhos = tf.minimum(tf.constant(1.), rhos)
 
-                    probs_supervised, _ = self._model_supervised(observations, training=False)
+                    # probs_supervised, _ = self._model_supervised(observations, training=False)
 
                 if self._is_debug:
                     clipped_rhos_v = clipped_rhos.numpy()
                     values_v = tf.squeeze(values).numpy()
 
                 with tape.stop_recording():
-                    targets = tf.where((total_rewards == 1.), 1.01, total_rewards)
-                    # targets = total_rewards
+                    # targets = tf.where((total_rewards == 1.), 1.01, total_rewards)
+                    targets = total_rewards
                     td_error = clipped_rhos * (targets - tf.squeeze(values))
 
                 if self._is_debug:
@@ -122,16 +122,16 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     td_error_v = td_error.numpy()
 
                 # supervised loss
-                supervised_loss = tools.base_loss(probs_supervised, probs, self._class_weights)
-                supervised_loss = tf.reduce_mean(supervised_loss)
+                # supervised_loss = tools.base_loss(probs_supervised, probs, self._class_weights)
+                # supervised_loss = tf.reduce_mean(supervised_loss)
 
                 # critic loss
                 critic_loss = .5 * tf.reduce_mean(tf.square(total_rewards - tf.squeeze(values)))
 
                 # actor loss
                 actor_loss = -1 * target_action_log_probs * td_error
-                actor_loss_positive = tf.gather(actor_loss, indices=tf.where(total_rewards > 0))
-                actor_loss_positive_sum = tf.reduce_sum(actor_loss_positive)
+                # actor_loss_positive = tf.gather(actor_loss, indices=tf.where(total_rewards > 0))
+                actor_loss = tf.reduce_mean(actor_loss)
 
                 # entropy loss
                 entropy = tools.get_entropy_from_probs(probs)
@@ -143,7 +143,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     # foo_v = foo.numpy()
                 # entropy_loss = -self._entropy_c * tf.reduce_sum(entropy * foo)
 
-                loss = actor_loss_positive_sum + entropy_loss + critic_loss + 1.e-2 * supervised_loss
+                loss = critic_loss + actor_loss + entropy_loss  # + supervised_loss
             grads = tape.gradient(loss, self._model.trainable_variables)
             grads = [tf.clip_by_norm(g, 4.0) for g in grads]
             self._optimizer.apply_gradients(zip(grads, self._model.trainable_variables))

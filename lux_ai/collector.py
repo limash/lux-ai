@@ -7,7 +7,7 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
     import tensorflow as tf
     import gym
     # import reverb
-    import ray
+    # import ray
 
     import lux_gym.agents.agents as agents
     from lux_ai import tools, tfrecords_storage
@@ -17,7 +17,7 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
     if len(physical_devices) > 0:
         tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
-    REWARD_CAP = 2000000
+    # REWARD_CAP = 2000000
 
     class Agent(abc.ABC):
         def __init__(self, config, data):
@@ -81,11 +81,33 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
             player1_data = tools.add_point(player1_data, actions_1_dict, actions_1_probs, proc_obs1, step)
             player2_data = tools.add_point(player2_data, actions_2_dict, actions_2_probs, proc_obs2, step)
 
-            for step in range(1, configuration.episodeSteps):
+            #  for step in range(1, configuration.episodeSteps):
+            while True:
+                step += 1
+                player1_prev_alive_units = [item.id for item in game_states[0].player.units]
+                player2_prev_alive_units = [item.id for item in game_states[1].player.units]
                 dones, observations = environment.step((actions_1, actions_2))
-                if any(dones):
-                    break
                 game_states = environment.game_states
+                if any(dones):
+                    player1_alive_units_ids = []
+                    player1_died_on_last_step_units_ids = []
+                    player1_alive_units = [item.id for item in game_states[0].player.units]
+                    for unit in player1_prev_alive_units:
+                        if unit in player1_alive_units:
+                            player1_alive_units_ids.append(unit)
+                        else:
+                            player1_died_on_last_step_units_ids.append(unit)
+
+                    player2_alive_units_ids = []
+                    player2_died_on_last_step_units_ids = []
+                    player2_alive_units = [item.id for item in game_states[1].player.units]
+                    for unit in player2_prev_alive_units:
+                        if unit in player2_alive_units:
+                            player2_alive_units_ids.append(unit)
+                        else:
+                            player2_died_on_last_step_units_ids.append(unit)
+
+                    break
                 actions_1, actions_1_dict, actions_1_probs, proc_obs1, reward1 = agent(observations[0],
                                                                                        configuration, game_states[0])
                 actions_2, actions_2_dict, actions_2_probs, proc_obs2, reward2 = agent(observations[1],
@@ -96,17 +118,54 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
 
             reward1 = observations[0]["reward"]
             reward2 = observations[1]["reward"]
+            unit_rewards = {}
+            if reward1 != reward2:
+                if reward1 > reward2:  # 1 player won
+                    win_data = player1_data
+                    win_died_on_last_step_units_ids = player1_died_on_last_step_units_ids
+                    # win_alive_units_ids = player1_alive_units_ids
+                    lose_data = player2_data
+                    lose_died_on_last_step_units_ids = player2_died_on_last_step_units_ids
+                    lose_alive_units_ids = player2_alive_units_ids
+                else:
+                    win_data = player2_data
+                    win_died_on_last_step_units_ids = player2_died_on_last_step_units_ids
+                    # win_alive_units_ids = player2_alive_units_ids
+                    lose_data = player1_data
+                    lose_died_on_last_step_units_ids = player1_died_on_last_step_units_ids
+                    lose_alive_units_ids = player1_alive_units_ids
+
+                for unit_id in win_data.keys():
+                    if unit_id in win_died_on_last_step_units_ids:
+                        unit_rewards[unit_id] = tf.constant(-0.33, dtype=tf.float16)
+                    else:
+                        unit_rewards[unit_id] = tf.constant(1, dtype=tf.float16)
+                for unit_id in lose_data.keys():
+                    if unit_id in lose_died_on_last_step_units_ids:
+                        unit_rewards[unit_id] = tf.constant(-1, dtype=tf.float16)
+                    elif unit_id in lose_alive_units_ids:
+                        unit_rewards[unit_id] = tf.constant(0.33, dtype=tf.float16)
+                    else:
+                        unit_rewards[unit_id] = tf.constant(0, dtype=tf.float16)
+            else:
+                players_data = {**player1_data, **player2_data}
+                for unit_id in players_data.keys():
+                    if unit_id in player1_died_on_last_step_units_ids + player2_died_on_last_step_units_ids:
+                        unit_rewards[unit_id] = tf.constant(-1, dtype=tf.float16)
+                    else:
+                        unit_rewards[unit_id] = tf.constant(0.33, dtype=tf.float16)
+
             progress = tf.linspace(0., 1., step + 2)[:-1]
             progress = tf.cast(progress, dtype=tf.float16)
 
-            if reward1 > reward2:
-                final_reward_1 = tf.constant(1, dtype=tf.float16)
-                final_reward_2 = tf.constant(-1, dtype=tf.float16)
-            elif reward1 < reward2:
-                final_reward_2 = tf.constant(1, dtype=tf.float16)
-                final_reward_1 = tf.constant(-1, dtype=tf.float16)
-            else:
-                final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
+            # if reward1 > reward2:
+            #     final_reward_1 = tf.constant(1, dtype=tf.float16)
+            #     final_reward_2 = tf.constant(-1, dtype=tf.float16)
+            # elif reward1 < reward2:
+            #     final_reward_2 = tf.constant(1, dtype=tf.float16)
+            #     final_reward_1 = tf.constant(-1, dtype=tf.float16)
+            # else:
+            #     final_reward_1 = final_reward_2 = tf.constant(0, dtype=tf.float16)
 
             # final_reward_1 = reward1 / REWARD_CAP if reward1 != -1 else 0
             # final_reward_1 = 2 * final_reward_1 - 1
@@ -115,13 +174,13 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
 
             if self._only_wins:
                 if reward1 > reward2:
-                    output = (player1_data, None), (final_reward_1, None), progress
+                    output = (player1_data, None), unit_rewards, progress
                 elif reward1 < reward2:
-                    output = (None, player2_data), (None, final_reward_2), progress
+                    output = (None, player2_data), unit_rewards, progress
                 else:
-                    output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+                    output = (player1_data, player2_data), unit_rewards, progress
             else:
-                output = (player1_data, player2_data), (final_reward_1, final_reward_2), progress
+                output = (player1_data, player2_data), unit_rewards, progress
 
             return output
 
@@ -129,8 +188,8 @@ def collect(config_out, input_data_out, data_path_out, collector_n_out, global_v
             return self._collect(self._agent)
 
         def collect_and_store(self, collect_n, data_path, collector_n):
-            (player1_data, player2_data), (final_reward_1, final_reward_2), progress = self.collect_once()
-            tfrecords_storage.record(player1_data, player2_data, final_reward_1, final_reward_2,
+            (player1_data, player2_data), rewards, progress = self.collect_once()
+            tfrecords_storage.record(player1_data, player2_data, rewards,
                                      self._feature_maps_shape, self._actions_shape, collect_n,
                                      collect_n, progress,
                                      is_for_rl=self._is_for_rl, save_path=data_path, collector_n=collector_n,

@@ -148,7 +148,7 @@ def write_tfrecord(ds, record_number, record_name, is_for_rl, save_path=None, co
         print(f"Wrote group #{record_number} {record_name} tfrec files containing {n} records")
 
 
-def record(player1_data, player2_data, final_reward_1, final_reward_2,
+def record(player1_data, player2_data, rewards,
            feature_maps_shape, actions_shape, record_number, record_name,
            progress=None, is_for_rl=False, save_path=None, collector_n=None, is_pg_rl=False):
     def data_gen_all():
@@ -266,8 +266,9 @@ def record(player1_data, player2_data, final_reward_1, final_reward_2,
         for j, player_data in enumerate((player1_data, player2_data)):
             if player_data is None:
                 continue
-            final_reward = final_reward_1 if j == 0 else final_reward_2
+            # final_reward = final_reward_1 if j == 0 else final_reward_2
             for key, unit in player_data.items():
+                final_reward = rewards[key]
                 unit_type = key.split("_")[0]
                 if unit_type != "u":
                     continue
