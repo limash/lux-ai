@@ -4,6 +4,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
     import pickle
     import itertools
     import glob
+    import pathlib
 
     import numpy as np
     import tensorflow as tf
@@ -48,9 +49,14 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
             files = glob.glob("./data/weights/*.pickle")
             files_n = len(files)
             if files_n > 0:
-                with open(files[-1], 'rb') as file:
+                raw_names = [int(pathlib.Path(file_name).stem) for file_name in files]
+                np_names = np.array(raw_names)
+                last_file_arg_number = np.argmax(np_names)
+                last_file = files[last_file_arg_number]
+                with open(last_file, 'rb') as file:
                     data = pickle.load(file)
-                    print(f"Continue the model training from {files[-1]}.")
+                    raw_name = raw_names[last_file_arg_number]
+                    print(f"Continue the model training from {raw_name}.")
             elif data is not None:
                 print("Continue the model training from data.pickle.")
             else:
@@ -106,7 +112,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     rhos = tf.exp(log_rhos)
                     clipped_rhos = tf.minimum(tf.constant(1.), rhos)
 
-                    # probs_supervised, _ = self._model_supervised(observations, training=False)
+                    probs_supervised, _ = self._model_supervised(observations, training=False)
 
                 if self._is_debug:
                     clipped_rhos_v = clipped_rhos.numpy()
@@ -122,8 +128,8 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     td_error_v = td_error.numpy()
 
                 # supervised loss
-                # supervised_loss = tools.base_loss(probs_supervised, probs, self._class_weights)
-                # supervised_loss = tf.reduce_mean(supervised_loss)
+                supervised_loss = tools.base_loss(probs_supervised, probs, self._class_weights)
+                supervised_loss = tf.reduce_mean(supervised_loss)
 
                 # critic loss
                 critic_loss = .5 * tf.reduce_mean(tf.square(total_rewards - tf.squeeze(values)))
@@ -143,7 +149,7 @@ def ac_mc_agent_run(config_in, data_in, global_var_actor_in=None, filenames_in=N
                     # foo_v = foo.numpy()
                 # entropy_loss = -self._entropy_c * tf.reduce_sum(entropy * foo)
 
-                loss = critic_loss + actor_loss + entropy_loss  # + supervised_loss
+                loss = critic_loss + actor_loss + entropy_loss + 1.e-2 * supervised_loss
             grads = tape.gradient(loss, self._model.trainable_variables)
             grads = [tf.clip_by_norm(g, 4.0) for g in grads]
             self._optimizer.apply_gradients(zip(grads, self._model.trainable_variables))

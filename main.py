@@ -7,6 +7,7 @@ import time
 import collections
 import itertools
 
+import numpy as np
 import ray
 
 from lux_ai import scraper, collector, evaluator, imitator, trainer_ac, trainer_pg, trainer_ac_mc, tools
@@ -302,7 +303,7 @@ def rl_train(input_data):  # , checkpoint):
     elif config["rl_type"] == "continuous_ac_mc":
         amount_of_pieces = 10
         previous_pieces = collections.deque([i + 2 for i in range(amount_of_pieces - 2)])
-        for i in range(10):
+        for i in range(100):
             print(f"PG learning, cycle {i}.")
             current_n = i % amount_of_pieces  # current and prev to use
             next_n = (i + 1) % amount_of_pieces  # next to collect
@@ -321,9 +322,13 @@ def rl_train(input_data):  # , checkpoint):
 
             files = glob.glob("./data/weights/*.pickle")
             if len(files) > 0:
-                with open(files[-1], 'rb') as datafile:
+                raw_names = [int(pathlib.Path(file_name).stem) for file_name in files]
+                np_names = np.array(raw_names)
+                last_file_arg_number = np.argmax(np_names)
+                last_file = files[last_file_arg_number]
+                with open(last_file, 'rb') as datafile:
                     input_data = pickle.load(datafile)
-                    raw_name = pathlib.Path(files[-1]).stem
+                    raw_name = raw_names[last_file_arg_number]
                     print(f"Training and collecting from {raw_name}.pickle weights.")
 
             ray.init(num_gpus=1, include_dashboard=False)

@@ -4,6 +4,7 @@ import time
 import pickle
 import pathlib
 
+import numpy as np
 import tensorflow as tf
 import kaggle_environments as kaggle
 import ray
@@ -34,11 +35,15 @@ class Agent(abc.ABC):
             files = glob.glob("./data/weights/*.pickle")
             files_n = len(files)
             if files_n > prev_files_n:
-                with open(files[-1], 'rb') as file:
+                raw_names = [int(pathlib.Path(file_name).stem) for file_name in files]
+                np_names = np.array(raw_names)
+                last_file_arg_number = np.argmax(np_names)
+                last_file = files[last_file_arg_number]
+                with open(last_file, 'rb') as file:
                     data = pickle.load(file)
+                    raw_name = raw_names[last_file_arg_number]
                 self._agent = agents.get_agent(self._model_name, data, is_gym=False)
                 summary = [0, 0]
-                raw_name = pathlib.Path(files[-1]).stem
                 print(f"Evaluating {raw_name}.pickle weights.")
             if self._agent is not None:
                 environment = kaggle.make("lux_ai_2021", configuration={"loglevel": 2}, debug=False)

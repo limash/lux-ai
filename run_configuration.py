@@ -34,9 +34,9 @@ CONF_Imitate = {
 }
 
 CONF_RL = {
-    "rl_type": "single_ac_mc",
+    "rl_type": "continuous_ac_mc",
     # "lambda": 0.8,
-    "debug": True,
+    "debug": False,
     "default_lr": 1e-5,
     "batch_size": 300,
     # "iterations_number": 1000,
